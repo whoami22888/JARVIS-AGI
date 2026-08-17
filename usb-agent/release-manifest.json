@@ -1,0 +1,26 @@
+{
+  "files": {
+    "backend/app.py": "353c41d7ac6884185bdfa5120041a9e538119f20d66251e96535a7299af5e8ac",
+    "backend/engine.py": "0f00a940f5d7c9e6640dfacffb8c40dc8db3a80bc7ae7575b05f9f36b424f479",
+    "backend/features.py": "a800231a20a04de25939ffd5fe52d3dae6d27e511fc030e152fa7c5c5ca231f0",
+    "backend/performance.py": "a7e79ffa6ede33633549bd3f5b30f379c26947ea6b37fea067beb25b0d9fabc3",
+    "backend/requirements.txt": "92a71a5700d9aed4e2a382ecbbef529ca76a92b6297a187f46064ea12ff9e581",
+    "config/.env.example": "22537ab6e04268e38d447c4d03e87596cf69c04348baf2805246a0bd64cd4034",
+    "config/models.json": "c366f8cc3e9d42a264b416b1165debe538038de1cef3c07c7e0339f6085a124e",
+    "frontend/app.js": "ba1833be4fb4954f77a18c5aee4e6bc578ca17788313e28b7231e0e4625e6ca4",
+    "frontend/index.html": "a9da746211a581e0a7a3d49a08922bd249f662926612f1a6de3563c8bf2b5e17",
+    "frontend/styles.css": "7d66e0b2c26ac2cee43bd2d4b607fb2b1034dc5228f30016436823c08b85f285",
+    "scripts/benchmark.sh": "2b4c1629c870051adefb71365327209235a079541ef99820f9a0aecc71cdd837",
+    "scripts/configure_zram.sh": "7ccf532b8311e2cbd1fe562101813975d45f9522a114630adbe389002cf25191",
+    "scripts/generate_release_manifest.py": "1d7b3453fa96e38410972b074de1f71cac70cfef5f2ff9fb13d56c41a569b171",
+    "scripts/launch.sh": "54b9ae68b1215aa579477212259b056c779f971036acaab0b5521d6c7f0d5a18",
+    "scripts/profile_host.py": "978afe7108ad3505d9275b4b7e5c378b5ff8e1c1b61f5a85c62a1d6fd8a0cb12",
+    "scripts/pull_models.sh": "17761f62f7c1a07193283374918c61ac1c32a9334a2fba6a8708755daabe7d6e",
+    "skills/knowledge_search.json": "0fd3b9c99efd4fc49c417680951d30b7c41045ed3cc12e8044f90ef9adc3e305",
+    "skills/system_status.json": "508cf428a42769cb42b30b466abd58ac277cd6521ccfbe65179cfe38e5a1f83f",
+    "skills/workspace_review.json": "974bb124cf75dee760ac4cfdd3adafd1a7c1fcd588d27e2f8dddd7b2716e1a4d",
+    "windows/Invoke-ElevatedAction.ps1": "1e1f5fc43c2758d7f4ad032734718f1423451f06ef50ac74fb76aa7570451a47",
+    "windows/Start-AIAgent.ps1": "91cd7ae28b0361e60a08ddee86dbc538a41cdb00f5cb119ba363acf35d284ec8"
+  },
+  "version": 1
+}

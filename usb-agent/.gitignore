@@ -11,3 +11,15 @@ runtime/
 dist/
 *.iso
 *.img
+
+# Regenerated Android and Debian live-build work trees
+android/.gradle/
+android/.bootstrap-cache/
+android/app/build/
+bootable/.build/
+bootable/binary/
+bootable/cache/
+bootable/chroot/
+bootable/*.packages
+bootable/chroot.headers
+bootable/chroot.packages.*

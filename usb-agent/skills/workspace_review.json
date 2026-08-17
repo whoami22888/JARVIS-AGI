@@ -1,0 +1,8 @@
+{
+  "id": "workspace_review",
+  "name": "Workspace Review",
+  "version": "1.0.0",
+  "description": "Search an approved code workspace, prepare a patch preview, and run approved bounded tests.",
+  "capabilities": ["read_files", "run_tests"],
+  "latency_budget_ms": 5000
+}

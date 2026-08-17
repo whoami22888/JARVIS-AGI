@@ -1,138 +1,18 @@
-const state = { socket: null, connected: false, models: [] };
-const $ = (selector) => document.querySelector(selector);
-const eventBox = $("#task-events");
-const template = $("#event-template");
-
-function format(value) {
-  return typeof value === "string" ? value : JSON.stringify(value, null, 2);
-}
-
-function addEvent(kind, payload) {
-  const welcome = eventBox.querySelector(".welcome");
-  if (welcome) welcome.remove();
-  const node = template.content.cloneNode(true);
-  node.querySelector(".event-meta").textContent = `${new Date().toLocaleTimeString()} · ${kind}`;
-  node.querySelector(".event-body").textContent = format(payload);
-  eventBox.prepend(node);
-}
-
-function setConnection(connected) {
-  state.connected = connected;
-  $("#connection-dot").className = `dot ${connected ? "online" : "offline"}`;
-  $("#connection-state").textContent = connected ? "Gateway online" : "Gateway offline";
-}
-
-function renderMetrics(host) {
-  if (!host) return;
-  const profile = host.profile || {};
-  $("#metric-profile").textContent = profile.name || "—";
-  $("#metric-cpu").textContent = `${host.cpu_percent ?? "—"}%`;
-  $("#metric-ram").textContent = `${host.memory_percent ?? "—"}%`;
-  $("#metric-disk").textContent = host.disk_free_mb ? `${Math.round(host.disk_free_mb / 1024)} GB` : "—";
-}
-
-function renderModels(models) {
-  state.models = models;
-  const list = $("#models");
-  const select = $("#model-select");
-  list.innerHTML = "";
-  select.innerHTML = '<option value="">Adaptive selection</option>';
-  for (const model of models) {
-    const item = document.createElement("article");
-    item.className = "model";
-    const ready = model.installed || model.provider !== "ollama";
-    item.innerHTML = `<span class="status ${ready ? "ready" : ""}">${ready ? (model.provider === "ollama" ? "READY" : "OPTIONAL") : "NOT INSTALLED"}</span><strong>${model.id}</strong><small>${model.role} · ${model.provider}</small><small>${model.tag}</small>`;
-    list.append(item);
-    const opt = document.createElement("option");
-    opt.value = model.id;
-    opt.textContent = `${model.id} (${model.provider})`;
-    select.append(opt);
-  }
-}
-
-function renderHistory(tasks) {
-  const history = $("#history");
-  history.innerHTML = "";
-  for (const task of tasks) {
-    const item = document.createElement("article");
-    item.className = "history-item";
-    item.innerHTML = `<strong>${task.state}</strong><small>${task.route?.reason || "route pending"}</small><small>${task.prompt.slice(0, 110)}</small>`;
-    item.addEventListener("click", () => addEvent(`TASK ${task.state}`, task));
-    history.append(item);
-  }
-}
-
-async function refresh() {
-  try {
-    const response = await fetch("/api/status");
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const payload = await response.json();
-    renderMetrics(payload.host);
-    renderModels(payload.models);
-    renderHistory(payload.tasks);
-    setConnection(true);
-  } catch (error) {
-    setConnection(false);
-    addEvent("STATUS ERROR", { error: error.message });
-  }
-}
-
-function connect() {
-  const protocol = location.protocol === "https:" ? "wss" : "ws";
-  const socket = new WebSocket(`${protocol}://${location.host}/ws/events`);
-  state.socket = socket;
-  socket.onopen = () => { setConnection(true); socket.send("ready"); };
-  socket.onmessage = (event) => {
-    const payload = JSON.parse(event.data);
-    if (payload.host) renderMetrics(payload.host);
-    addEvent(payload.type || payload.state || "EVENT", payload);
-    if (["COMPLETED", "FAILED"].includes(payload.state)) refresh();
-  };
-  socket.onclose = () => { setConnection(false); window.setTimeout(connect, 1800); };
-  socket.onerror = () => socket.close();
-}
-
-$("#task-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const prompt = $("#prompt").value.trim();
-  if (!prompt) return;
-  const submit = $("#submit");
-  submit.disabled = true;
-  try {
-    const response = await fetch("/api/tasks", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt, requested_model: $("#model-select").value || null })
-    });
-    if (!response.ok) throw new Error((await response.json()).detail || `HTTP ${response.status}`);
-    addEvent("QUEUED", await response.json());
-    $("#prompt").value = "";
-    refresh();
-  } catch (error) {
-    addEvent("TASK ERROR", { error: error.message });
-  } finally {
-    submit.disabled = false;
-  }
-});
-
-$("#refresh").addEventListener("click", refresh);
-$("#proposal").addEventListener("click", async () => {
-  try {
-    const response = await fetch("/api/approvals", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        kind: "elevated_windows_action",
-        title: "Test elevated action",
-        reason: "Verifies that approval proposals are visible and separate from normal tasks.",
-        details: { executable: "not executed", scope: "test only" }
-      })
-    });
-    addEvent("APPROVAL PROPOSAL", await response.json());
-  } catch (error) {
-    addEvent("APPROVAL ERROR", { error: error.message });
-  }
-});
-
-refresh();
-connect();
+const state = { token: localStorage.getItem('usb_agent_token') || '', status: null };
+const $ = (id) => document.getElementById(id);
+const enc = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[char]));
+function headers() { return state.token ? { Authorization: `Bearer ${state.token}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' }; }
+function setConnection(text, online = false) { $('connection-state').textContent = text; $('connection-dot').className = `dot ${online ? 'online' : 'offline'}`; }
+function showEvent(title, payload) { const item = document.importNode($('event-template').content, true); item.querySelector('.event-meta').textContent = `${new Date().toLocaleTimeString()} · ${title}`; item.querySelector('.event-body').textContent = typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2); $('task-events').prepend(item); while ($('task-events').children.length > 40) $('task-events').lastElementChild.remove(); }
+async function request(path, options = {}) { const response = await fetch(path, { ...options, headers: { ...headers(), ...(options.headers || {}) } }); const body = await response.json().catch(() => ({})); if (!response.ok) throw new Error(body.detail || `Request failed (${response.status})`); return body; }
+function renderModels(models = []) { $('models').innerHTML = models.map((model) => `<article class="model ${model.installed ? 'ready' : 'missing'}"><strong>${enc(model.id)}</strong><span>${enc(model.role)} · ${enc(model.provider)}</span><small>${model.installed ? 'Installed / ready' : 'Not installed'}</small></article>`).join('') || '<p class="muted">No model registry entries.</p>'; $('model-select').innerHTML = '<option value="">Adaptive selection</option>' + models.map((model) => `<option value="${enc(model.id)}" ${model.installed ? '' : 'disabled'}>${enc(model.id)}${model.installed ? '' : ' — unavailable'}</option>`).join(''); }
+function renderSkills(skills = [], grants = []) { $('skills').innerHTML = skills.map((skill) => `<div class="line"><strong>${enc(skill.name || skill.id)}</strong><span class="badge ${skill.status === 'READY' ? 'ok' : 'bad'}">${enc(skill.status)}</span></div>`).join('') || '<p class="muted">No skills registered.</p>'; $('capabilities').innerHTML = grants.length ? grants.map((grant) => `<div class="line"><strong>${enc(grant.capability)}</strong><small>expires ${new Date(grant.expires_at).toLocaleTimeString()}</small></div>`).join('') : '<p class="muted">No active capability grants.</p>'; }
+function renderStorage(storage = {}, queue = {}) { const format = (bytes) => bytes == null ? '—' : `${(bytes / 1024 / 1024).toFixed(0)} MB`; $('storage').innerHTML = `<div class="line"><strong>Free</strong><span>${format(storage.free_bytes)}</span></div><div class="line"><strong>Models</strong><span>${format(storage.models_bytes)}</span></div><div class="line"><strong>Index queue</strong><span>${queue.PENDING || 0} pending / ${queue.INDEXED || 0} indexed</span></div><small>${enc(storage.cleanup_recommendation || '')}</small>`; }
+function renderTimeline(tasks = []) { $('timeline').innerHTML = tasks.slice(0, 12).map((task) => `<article class="history-item"><strong>${enc(task.state)}</strong><span>${enc(task.route?.reason || 'route pending')}</span><small>${enc((task.events || []).map((event) => event.kind).join(' → ') || task.updated_at)}</small></article>`).join('') || '<p class="muted">No task checkpoints yet.</p>'; }
+function renderStatus(status) { state.status = status; const host = status.host || {}; const profile = host.profile || {}; $('metric-profile').textContent = profile.name || '—'; $('metric-cpu').textContent = `${host.cpu_percent ?? '—'}%`; $('metric-ram').textContent = `${host.memory_percent ?? '—'}%`; $('metric-disk').textContent = `${host.disk_free_mb ?? '—'} MB`; $('metric-working').textContent = `${status.working_set?.hot_memory_budget_mb ?? '—'} MB hot`; $('metric-integrity').textContent = status.integrity?.status || 'MISSING'; $('metric-integrity').className = status.integrity?.status === 'VERIFIED' ? 'ok-text' : 'warn-text'; $('offline-only').checked = Boolean(status.offline_only); renderModels(status.models); renderSkills(status.skills, status.capabilities); renderStorage(status.storage, status.index_queue); renderTimeline(status.tasks); }
+async function refresh() { try { renderStatus(await request('/api/status')); setConnection('Connected', true); } catch (error) { setConnection(error.message, false); showEvent('Status error', error.message); } }
+async function createTask(event) { event.preventDefault(); const prompt = $('prompt').value.trim() || $('template-select').value; if (!prompt) return; try { const task = await request('/api/tasks', { method: 'POST', body: JSON.stringify({ prompt, requested_model: $('model-select').value || null, template_id: $('template-select').value || null }) }); $('prompt').value = ''; showEvent('Task queued', task); await refresh(); } catch (error) { showEvent('Task rejected', error.message); } }
+async function createApproval() { try { const approval = await request('/api/approvals', { method: 'POST', body: JSON.stringify({ kind: 'elevated_windows_action', title: 'System diagnostics proposal', reason: 'Runs only the fixed, auditable diagnostics helper.', details: { action: 'diagnostics' } }) }); showEvent('Approval proposal', approval); } catch (error) { showEvent('Approval error', error.message); } }
+async function searchKnowledge(event) { event.preventDefault(); const query = $('knowledge-query').value.trim(); if (!query) return; try { const result = await request(`/api/knowledge/search?query=${encodeURIComponent(query)}`); $('knowledge-results').innerHTML = result.results.map((item) => `<article><strong>${enc(item.path)}</strong><p>${item.excerpt}</p></article>`).join('') || '<p class="muted">No matches.</p>'; } catch (error) { $('knowledge-results').textContent = error.message; } }
+function connectEvents() { const token = state.token ? `?token=${encodeURIComponent(state.token)}` : ''; const socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/events${token}`); socket.onmessage = ({ data }) => { try { const event = JSON.parse(data); if (event.type !== 'connected') { showEvent(event.type || event.state || 'event', event); refresh(); } } catch { /* malformed events are ignored */ } }; socket.onclose = () => setTimeout(connectEvents, 2500); socket.onerror = () => socket.close(); }
+$('refresh').addEventListener('click', refresh); $('task-form').addEventListener('submit', createTask); $('proposal').addEventListener('click', createApproval); $('knowledge-form').addEventListener('submit', searchKnowledge); $('template-select').addEventListener('change', () => { if (!$('prompt').value) $('prompt').value = $('template-select').value; }); $('offline-only').addEventListener('change', () => showEvent('Offline-only setting', 'Change USB_AGENT_OFFLINE_ONLY in the local configuration and restart the gateway to persist this safety boundary.')); refresh(); connectEvents();

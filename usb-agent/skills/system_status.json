@@ -1,0 +1,8 @@
+{
+  "id": "system_status",
+  "name": "System Status",
+  "version": "1.0.0",
+  "description": "Read local host capacity, storage, and gateway status without modifying the host.",
+  "capabilities": [],
+  "latency_budget_ms": 500
+}

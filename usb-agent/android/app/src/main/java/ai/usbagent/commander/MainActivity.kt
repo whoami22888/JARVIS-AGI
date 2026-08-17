@@ -58,6 +58,9 @@ data class UiState(
     val connection: String = "Not paired",
     val hostSummary: String = "No gateway status loaded.",
     val taskSummary: String = "",
+    val integritySummary: String = "Integrity not checked.",
+    val skillsSummary: String = "Skills not loaded.",
+    val timelineSummary: String = "No task checkpoints.",
     val error: String? = null
 )
 
@@ -107,7 +110,7 @@ class GatewayViewModel : ViewModel() {
             val request = Request.Builder().url("$endpoint/api/pair").post(body).build()
             http.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) throw IllegalStateException("Pairing failed with HTTP ${response.code}")
-                val token = JSONObject(response.body.string()).getString("access_token")
+                val token = JSONObject(response.body?.string() ?: throw IllegalStateException("Gateway returned an empty response body")).getString("access_token")
                 store?.save(endpoint, token)
                 ui = ui.copy(connection = "Paired securely", pairingCode = "", error = null)
             }
@@ -122,11 +125,15 @@ class GatewayViewModel : ViewModel() {
             val request = Request.Builder().url("$endpoint/api/status").header("Authorization", "Bearer $token").get().build()
             http.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) throw IllegalStateException("Status failed with HTTP ${response.code}")
-                val root = JSONObject(response.body.string())
+                val root = JSONObject(response.body?.string() ?: throw IllegalStateException("Gateway returned an empty response body"))
                 val host = root.getJSONObject("host")
-                val profile = host.getJSONObject("profile").getJSONObject("profile").getString("name")
+                val profile = host.getJSONObject("profile").getString("name")
                 val summary = "Profile $profile · CPU ${host.getDouble("cpu_percent")}% · RAM ${host.getDouble("memory_percent")}% · Free ${host.getLong("disk_free_mb") / 1024} GB"
-                ui = ui.copy(hostSummary = summary, connection = "Gateway online", error = null)
+                val integrity = root.optJSONObject("integrity")?.optString("status", "Unknown") ?: "Unknown"
+                val skillCount = root.optJSONArray("skills")?.length() ?: 0
+                val tasks = root.optJSONArray("tasks")
+                val latest = if (tasks != null && tasks.length() > 0) tasks.getJSONObject(0).optString("state", "Unknown") else "No tasks"
+                ui = ui.copy(hostSummary = summary, integritySummary = "Release integrity: $integrity", skillsSummary = "$skillCount registered skills", timelineSummary = "Latest task: $latest", connection = "Gateway online", error = null)
             }
         } catch (error: Exception) { ui = ui.copy(connection = "Gateway unavailable", error = error.message ?: "Status unavailable") }
     }
@@ -140,7 +147,7 @@ class GatewayViewModel : ViewModel() {
             val request = Request.Builder().url("$endpoint/api/tasks").header("Authorization", "Bearer $token").post(body).build()
             http.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) throw IllegalStateException("Task submission failed with HTTP ${response.code}")
-                val task = JSONObject(response.body.string())
+                val task = JSONObject(response.body?.string() ?: throw IllegalStateException("Gateway returned an empty response body"))
                 val route = task.getJSONObject("route")
                 ui = ui.copy(taskSummary = "Queued ${task.getString("id").take(8)} via ${route.getString("reason")}", prompt = "", error = null)
             }
@@ -168,6 +175,9 @@ fun CommandCenter(viewModel: GatewayViewModel = viewModel()) {
                 Text("Gateway", style = MaterialTheme.typography.titleMedium)
                 Text(ui.connection)
                 Text(ui.hostSummary, style = MaterialTheme.typography.bodySmall)
+                Text(ui.integritySummary, style = MaterialTheme.typography.bodySmall)
+                Text(ui.skillsSummary, style = MaterialTheme.typography.bodySmall)
+                Text(ui.timelineSummary, style = MaterialTheme.typography.bodySmall)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = { showPairing = !showPairing }) { Text(if (showPairing) "Hide pairing" else "Pair gateway") }
                     TextButton(onClick = viewModel::refresh) { Text("Refresh") }

@@ -311,7 +311,8 @@ class RequestRouter:
             entry = fallback_local[0]
             return RouteDecision("ollama", entry.id, entry.tag, "installed local fallback", profile.context_tokens)
 
-        cloud = [entry for entry in compatible if entry.provider == "deepseek" and os.environ.get("DEEPSEEK_API_KEY")]
+        cloud_allowed = os.environ.get("USB_AGENT_OFFLINE_ONLY", "0") != "1"
+        cloud = [entry for entry in compatible if cloud_allowed and entry.provider == "deepseek" and os.environ.get("DEEPSEEK_API_KEY")]
         if cloud:
             entry = cloud[0]
             return RouteDecision("deepseek", entry.id, entry.tag, f"configured cloud {desired_role} route", profile.context_tokens)

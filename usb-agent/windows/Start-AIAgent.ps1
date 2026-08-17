@@ -1,7 +1,9 @@
 [CmdletBinding()]
 param(
   [switch]$NoBrowser,
-  [switch]$ForceRestart
+  [switch]$ForceRestart,
+  [switch]$OfflineOnly,
+  [switch]$RequireIntegrity
 )
 
 $ErrorActionPreference = 'Stop'
@@ -14,10 +16,14 @@ $GatewayLog = Join-Path $LogDir 'gateway.log'
 $GatewayPid = Join-Path $RunDir 'gateway.pid'
 $Port = if ($env:USB_AGENT_PORT) { $env:USB_AGENT_PORT } else { '8787' }
 $Url = "http://127.0.0.1:$Port"
+$Manifest = Join-Path $Root 'release-manifest.json'
 
 New-Item -ItemType Directory -Force -Path $RunDir, $LogDir | Out-Null
 if (-not (Test-Path $Python)) {
   throw "Portable Python runtime was not found at $Python. Run the USB preparation process before launching."
+}
+if ($RequireIntegrity -and -not (Test-Path $Manifest)) {
+  throw "Release manifest was not found at $Manifest. Refusing integrity-required launch."
 }
 
 function Test-AgentHealth {
@@ -36,6 +42,7 @@ if (-not (Test-AgentHealth)) {
   $env:USB_AGENT_DATA = $DataDir
   $env:USB_AGENT_CONFIG = Join-Path $Root 'config'
   $env:PYTHONPATH = Join-Path $Root 'backend'
+  $env:USB_AGENT_OFFLINE_ONLY = if ($OfflineOnly) { '1' } else { '0' }
   $arguments = '-m uvicorn app:app --app-dir "{0}" --host 127.0.0.1 --port {1}' -f (Join-Path $Root 'backend'), $Port
   $process = Start-Process -FilePath $Python -ArgumentList $arguments -WorkingDirectory $Root -RedirectStandardOutput $GatewayLog -RedirectStandardError $GatewayLog -PassThru -WindowStyle Hidden
   Set-Content -Path $GatewayPid -Value $process.Id
@@ -49,4 +56,4 @@ if (-not (Test-AgentHealth)) {
 }
 
 if (-not $NoBrowser) { Start-Process $Url }
-Write-Host "USB Agent is ready at $Url"
+Write-Host "USB Agent is ready at $Url (offline-only: $OfflineOnly)"

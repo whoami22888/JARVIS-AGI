@@ -1,0 +1,8 @@
+{
+  "id": "knowledge_search",
+  "name": "Local Knowledge Search",
+  "version": "1.0.0",
+  "description": "Search content that the owner has explicitly approved for local indexing.",
+  "capabilities": ["read_files"],
+  "latency_budget_ms": 1500
+}
