@@ -42,7 +42,7 @@ class AgentViewModel : ViewModel() {
     private val client = GatewayClient()
     fun initialize(activity: ComponentActivity) { vault = TokenVault(activity); memoryStore = MemoryStore(activity); paired = vault.load() != null; if (paired) status = "Paired token stored on device" }
     suspend fun pair() { try { val result = client.pair(gatewayUrl, "WhiteRabbit Neo Android", pairingCode); vault.save(result.token); paired = true; status = "Paired as ${result.deviceId.take(8)}…" } catch (e: Exception) { status = e.message ?: "Pairing failed" } }
-    suspend fun run(prompt: String) { try { val token = vault.load() ?: error("Pair the gateway first"); status = "DeepSeek R1 routing…"; val result = client.task(gatewayUrl, token, prompt, enabled); status = result.status; answer = result.answer } catch (e: Exception) { status = e.message ?: "Task failed" } }
+    suspend fun run(prompt: String) { try { val token = vault.load() ?: error("Pair the gateway first"); status = "Hybrid routing: local Ollama preferred…"; val result = client.task(gatewayUrl, token, prompt, enabled); status = result.status; answer = result.answer } catch (e: Exception) { status = e.message ?: "Task failed" } }
     suspend fun addRegistry(kind: String, name: String, definition: JSONObject) { try { val token = vault.load() ?: error("Pair the gateway first"); client.createRegistryItem(gatewayUrl, token, kind, name, definition); status = "$kind added to registry" } catch (e: Exception) { status = e.message ?: "Registry update failed" } }
     fun memory(): List<String> = if (::memoryStore.isInitialized) memoryStore.list() else emptyList()
     fun addMemory(note: String) { memoryStore.add(note) }
@@ -62,7 +62,7 @@ fun WhiteRabbitApp(activity: ComponentActivity, vm: AgentViewModel = viewModel()
             NavigationBar(containerColor = Panel) { Destination.entries.forEach { item -> NavigationBarItem(selected = destination == item, onClick = { destination = item }, icon = { Text(item.label.take(1), color = Mint, fontWeight = FontWeight.Bold) }, label = { Text(item.label) }) } }
         }) { padding -> Column(Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
             Text("WHITE RABBIT NEO", color = Mint, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Black)
-            Text("Unified agent HUD · DeepSeek R1 routing", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text("Unified agent HUD · hybrid DeepSeek routing", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(8.dp)); StatusCard(vm.status, vm.paired)
             Spacer(Modifier.height(12.dp))
             when (destination) {
@@ -86,7 +86,7 @@ fun WhiteRabbitApp(activity: ComponentActivity, vm: AgentViewModel = viewModel()
     CapabilityToggle("API calls — gateway-authorized only", api) { api = it; vm.enabled = vm.enabled.toMutableSet().apply { if (it) add("api_call") else remove("api_call") } }
     CapabilityToggle("Automation — always proposed, never silent", automation) { automation = it; vm.enabled = vm.enabled.toMutableSet().apply { if (it) add("automation") else remove("automation") } }
     OutlinedTextField(value = prompt, onValueChange = { prompt = it }, label = { Text("Ask the unified agent") }, modifier = Modifier.fillMaxWidth().height(140.dp))
-    Button(onClick = { scope.launch { vm.run(prompt) } }, enabled = vm.paired && prompt.isNotBlank(), modifier = Modifier.fillMaxWidth()) { Text("Run with DeepSeek R1") }
+    Button(onClick = { scope.launch { vm.run(prompt) } }, enabled = vm.paired && prompt.isNotBlank(), modifier = Modifier.fillMaxWidth()) { Text("Run unified agent") }
     if (vm.answer.isNotBlank()) Card(colors = CardDefaults.cardColors(containerColor = Panel)) { Text(vm.answer, Modifier.padding(14.dp), color = Color.White) }
 } }
 
