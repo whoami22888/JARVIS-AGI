@@ -1,0 +1,13 @@
+.env
+.venv/
+__pycache__/
+*.py[cod]
+data/*
+!data/.gitkeep
+models/store/
+models/*.manifest
+checksums/*.sha256
+runtime/
+dist/
+*.iso
+*.img

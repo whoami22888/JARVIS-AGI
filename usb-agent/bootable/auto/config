@@ -1,0 +1,32 @@
+#!/usr/bin/env sh
+set -eu
+
+lb config noauto \
+  --mode debian \
+  --architectures amd64 \
+  --binary-images iso-hybrid \
+  --bootappend-live "boot=live components persistence" \
+  --distribution bookworm \
+  --mirror-bootstrap "http://deb.debian.org/debian/" \
+  --mirror-chroot "http://deb.debian.org/debian/" \
+  --mirror-chroot-security "http://security.debian.org/debian-security/" \
+  --mirror-binary "http://deb.debian.org/debian/" \
+  --mirror-binary-security "http://security.debian.org/debian-security/" \
+  --security false \
+  --volatile false \
+  --parent-mirror-bootstrap "http://deb.debian.org/debian/" \
+  --parent-mirror-chroot "http://deb.debian.org/debian/" \
+  --parent-mirror-chroot-security "http://security.debian.org/debian-security/" \
+  --parent-mirror-binary "http://deb.debian.org/debian/" \
+  --parent-mirror-binary-security "http://security.debian.org/debian-security/" \
+  --archive-areas "main contrib non-free-firmware" \
+  --keyring-packages "debian-archive-keyring" \
+  --linux-packages "linux-image" \
+  --linux-flavours "amd64" \
+  --debian-installer false \
+  --iso-application "USB Agent Live" \
+  --iso-publisher "USB Agent" \
+  --memtest none \
+  --syslinux-theme "live-build" \
+  --bootloader "syslinux" \
+  --system live

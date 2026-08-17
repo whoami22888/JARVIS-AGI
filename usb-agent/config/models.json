@@ -1,0 +1,52 @@
+{
+  "models": [
+    {
+      "id": "whiterabbit-neo-8b",
+      "provider": "ollama",
+      "tag": "WhiteRabbitNeo/Llama-3.1-WhiteRabbitNeo-2-8B",
+      "role": "specialist",
+      "minimum_profile": "HIGH",
+      "enabled": true
+    },
+    {
+      "id": "qwen-coder-7b",
+      "provider": "ollama",
+      "tag": "qwen2.5-coder:7b",
+      "role": "coder",
+      "minimum_profile": "MEDIUM",
+      "enabled": true
+    },
+    {
+      "id": "deepseek-r1-8b-local",
+      "provider": "ollama",
+      "tag": "deepseek-r1:8b",
+      "role": "planner",
+      "minimum_profile": "MEDIUM",
+      "enabled": true
+    },
+    {
+      "id": "llama-3-1-8b",
+      "provider": "ollama",
+      "tag": "llama3.1:8b",
+      "role": "general",
+      "minimum_profile": "MEDIUM",
+      "enabled": true
+    },
+    {
+      "id": "deepseek-v4-flash",
+      "provider": "deepseek",
+      "tag": "deepseek-v4-flash",
+      "role": "general",
+      "minimum_profile": "ULTRA_LOW",
+      "enabled": true
+    },
+    {
+      "id": "deepseek-v4-pro",
+      "provider": "deepseek",
+      "tag": "deepseek-v4-pro",
+      "role": "planner",
+      "minimum_profile": "ULTRA_LOW",
+      "enabled": true
+    }
+  ]
+}

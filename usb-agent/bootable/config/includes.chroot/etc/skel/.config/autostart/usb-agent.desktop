@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=USB Agent Command Center
+Comment=Start the local USB Agent gateway and dashboard
+Exec=/opt/usb-agent/scripts/launch.sh
+Terminal=false
+X-GNOME-Autostart-enabled=true

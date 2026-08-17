@@ -1,0 +1,21 @@
+#!/bin/sh
+# Compatibility wrapper for older live-build templates that invoke:
+# rsvg --format png --height HEIGHT --width WIDTH INPUT OUTPUT
+set -eu
+FORMAT=png
+HEIGHT=
+WIDTH=
+INPUT=
+OUTPUT=
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --format) FORMAT="$2"; shift 2 ;;
+    --height) HEIGHT="$2"; shift 2 ;;
+    --width) WIDTH="$2"; shift 2 ;;
+    *)
+      if [ -z "$INPUT" ]; then INPUT="$1"; else OUTPUT="$1"; fi
+      shift
+      ;;
+  esac
+done
+exec rsvg-convert -f "$FORMAT" ${HEIGHT:+-h "$HEIGHT"} ${WIDTH:+-w "$WIDTH"} "$INPUT" -o "$OUTPUT"

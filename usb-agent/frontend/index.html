@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#08111f" />
+  <title>USB Agent Command Center</title>
+  <link rel="stylesheet" href="/assets/styles.css" />
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">PORTABLE • ADAPTIVE • LOCAL-FIRST</p>
+        <h1>Unified Agent Command Center</h1>
+      </div>
+      <div class="connection"><span id="connection-dot" class="dot offline"></span><span id="connection-state">Connecting</span></div>
+    </header>
+
+    <section class="metrics" aria-label="Host performance metrics">
+      <article><span>Profile</span><strong id="metric-profile">—</strong></article>
+      <article><span>CPU</span><strong id="metric-cpu">—</strong></article>
+      <article><span>RAM</span><strong id="metric-ram">—</strong></article>
+      <article><span>Free storage</span><strong id="metric-disk">—</strong></article>
+    </section>
+
+    <section class="workspace">
+      <aside class="left-panel">
+        <div class="panel-heading"><h2>Model Router</h2><button id="refresh" class="icon-button" title="Refresh status">↻</button></div>
+        <div id="models" class="model-list" aria-live="polite"></div>
+        <div class="router-note">Local models are selected first. Cloud routes appear only when configured.</div>
+      </aside>
+
+      <section class="chat-panel">
+        <div id="task-events" class="task-events" aria-live="polite">
+          <div class="welcome"><h2>Ready when you are</h2><p>Run locally available models, view adaptive host status, and keep task history on your portable data store.</p></div>
+        </div>
+        <form id="task-form" class="composer">
+          <label for="model-select">Route</label>
+          <select id="model-select"><option value="">Adaptive selection</option></select>
+          <label class="sr-only" for="prompt">Task prompt</label>
+          <textarea id="prompt" rows="3" maxlength="20000" placeholder="Describe the task…"></textarea>
+          <button id="submit" type="submit">Run task</button>
+        </form>
+      </section>
+
+      <aside class="right-panel">
+        <div class="panel-heading"><h2>Task History</h2></div>
+        <div id="history" class="history"></div>
+        <div class="approval-card">
+          <h2>Advanced Integration</h2>
+          <p>Elevated Windows actions and device actions require a visible, separate approval. Normal tasks never run elevated.</p>
+          <button id="proposal" class="secondary">Create test approval</button>
+        </div>
+      </aside>
+    </section>
+  </main>
+  <template id="event-template"><article class="event"><div class="event-meta"></div><pre class="event-body"></pre></article></template>
+  <script src="/assets/app.js"></script>
+</body>
+</html>
