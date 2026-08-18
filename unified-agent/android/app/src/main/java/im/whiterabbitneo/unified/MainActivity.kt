@@ -18,6 +18,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import im.whiterabbitneo.unified.data.GatewayClient
+import im.whiterabbitneo.unified.data.HudRouteState
+import im.whiterabbitneo.unified.data.HudRouteStates
 import im.whiterabbitneo.unified.data.MemoryStore
 import im.whiterabbitneo.unified.data.TokenVault
 import kotlinx.coroutines.launch
@@ -35,14 +37,15 @@ class AgentViewModel : ViewModel() {
     var pairingCode by mutableStateOf("")
     var paired by mutableStateOf(false)
     var status by mutableStateOf("Gateway not paired")
+    var routeState by mutableStateOf(HudRouteStates.idle)
     var answer by mutableStateOf("")
     var enabled by mutableStateOf(setOf<String>())
     private lateinit var vault: TokenVault
     private lateinit var memoryStore: MemoryStore
     private val client = GatewayClient()
     fun initialize(activity: ComponentActivity) { vault = TokenVault(activity); memoryStore = MemoryStore(activity); paired = vault.load() != null; if (paired) status = "Paired token stored on device" }
-    suspend fun pair() { try { val result = client.pair(gatewayUrl, "WhiteRabbit Neo Android", pairingCode); vault.save(result.token); paired = true; status = "Paired as ${result.deviceId.take(8)}…" } catch (e: Exception) { status = e.message ?: "Pairing failed" } }
-    suspend fun run(prompt: String) { try { val token = vault.load() ?: error("Pair the gateway first"); status = "Hybrid routing: local Ollama preferred…"; val result = client.task(gatewayUrl, token, prompt, enabled); status = result.status; answer = result.answer } catch (e: Exception) { status = e.message ?: "Task failed" } }
+    suspend fun pair() { try { val result = client.pair(gatewayUrl, "WhiteRabbit Neo Android", pairingCode); vault.save(result.token); paired = true; routeState = HudRouteStates.idle; status = "Paired as ${result.deviceId.take(8)}…" } catch (e: Exception) { routeState = HudRouteStates.failure(e.message ?: "Pairing failed"); status = routeState.detail } }
+    suspend fun run(prompt: String) { try { val token = vault.load() ?: error("Pair the gateway first"); routeState = HudRouteStates.running; status = routeState.detail; val result = client.task(gatewayUrl, token, prompt, enabled); routeState = HudRouteStates.fromTask(result.status, result.route); status = routeState.detail; answer = result.answer } catch (e: Exception) { routeState = HudRouteStates.failure(e.message ?: "Task failed"); status = routeState.detail } }
     suspend fun addRegistry(kind: String, name: String, definition: JSONObject) { try { val token = vault.load() ?: error("Pair the gateway first"); client.createRegistryItem(gatewayUrl, token, kind, name, definition); status = "$kind added to registry" } catch (e: Exception) { status = e.message ?: "Registry update failed" } }
     fun memory(): List<String> = if (::memoryStore.isInitialized) memoryStore.list() else emptyList()
     fun addMemory(note: String) { memoryStore.add(note) }
@@ -63,7 +66,7 @@ fun WhiteRabbitApp(activity: ComponentActivity, vm: AgentViewModel = viewModel()
         }) { padding -> Column(Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
             Text("WHITE RABBIT NEO", color = Mint, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Black)
             Text("Unified agent HUD · hybrid DeepSeek routing", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(8.dp)); StatusCard(vm.status, vm.paired)
+            Spacer(Modifier.height(8.dp)); StatusCard(vm.status, vm.paired, vm.routeState)
             Spacer(Modifier.height(12.dp))
             when (destination) {
                 Destination.Command -> CommandScreen(vm)
@@ -76,7 +79,7 @@ fun WhiteRabbitApp(activity: ComponentActivity, vm: AgentViewModel = viewModel()
     }
 }
 
-@Composable private fun StatusCard(status: String, paired: Boolean) = Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(14.dp)) { Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Column { Text(if (paired) "SECURE GATEWAY LINK" else "SETUP REQUIRED", color = Mint, style = MaterialTheme.typography.labelMedium); Text(status, color = Muted, style = MaterialTheme.typography.bodySmall) }; AssistChip(onClick = {}, label = { Text(if (paired) "PAIRED" else "OFFLINE") }) } }
+@Composable private fun StatusCard(status: String, paired: Boolean, routeState: HudRouteState) = Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(14.dp)) { Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Column { Text(if (paired) "SECURE GATEWAY LINK" else "SETUP REQUIRED", color = Mint, style = MaterialTheme.typography.labelMedium); Text(status, color = Muted, style = MaterialTheme.typography.bodySmall) }; AssistChip(onClick = {}, label = { Text(if (paired) routeState.mode.chip else "OFFLINE") }) } }
 
 @Composable private fun CommandScreen(vm: AgentViewModel) { val scope = rememberCoroutineScope(); var prompt by remember { mutableStateOf("") }; var web by remember { mutableStateOf(false) }; var api by remember { mutableStateOf(false) }; var automation by remember { mutableStateOf(false) }; Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
     OutlinedTextField(value = vm.gatewayUrl, onValueChange = { vm.gatewayUrl = it }, label = { Text("HTTPS gateway URL") }, modifier = Modifier.fillMaxWidth(), singleLine = true)

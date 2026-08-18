@@ -17,3 +17,7 @@ __pycache__/
 .idea/
 .vscode/
 .DS_Store
+
+# Backend test runtime state
+backend/tests/.hud-route-data/
+backend/tests/.hybrid-test-data/

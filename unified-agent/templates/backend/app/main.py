@@ -46,10 +46,12 @@ def pair(request: PairRequest):
 @app.post("/v1/tasks")
 async def create_task(request: TaskRequest, device_id: str = Depends(authenticated_device)):
     task_id = store.create_task(device_id, request.prompt, request.model or cfg.deepseek_model)
+    resolved_route: str | None = None
     store.set_task(task_id, "running")
     store.event(task_id, "routing.selected", {"requested_model": request.model or cfg.deepseek_model, "capabilities": request.enabled_capabilities})
     try:
         completion = await complete(cfg, request.prompt, request.model or cfg.deepseek_model)
+        resolved_route = completion.route
         store.set_task(task_id, "completed", completion.content)
         store.event(task_id, "routing.resolved", {"route": completion.route, "model": completion.model})
         store.event(task_id, "task.completed", {"answer_length": len(completion.content)})
@@ -57,7 +59,10 @@ async def create_task(request: TaskRequest, device_id: str = Depends(authenticat
         answer = str(exc)
         store.set_task(task_id, "blocked", answer)
         store.event(task_id, "task.blocked", {"reason": answer})
-    return store.get_task(task_id, device_id)
+    task = store.get_task(task_id, device_id)
+    if task:
+        task["route"] = resolved_route
+    return task
 
 
 @app.get("/v1/tasks/{task_id}")
