@@ -20,6 +20,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import im.whiterabbitneo.unified.data.GatewayClient
 import im.whiterabbitneo.unified.data.HudRouteState
 import im.whiterabbitneo.unified.data.HudRouteStates
+import im.whiterabbitneo.unified.data.ManagedGatewayConfig
 import im.whiterabbitneo.unified.data.MemoryStore
 import im.whiterabbitneo.unified.data.TokenVault
 import kotlinx.coroutines.launch
@@ -34,17 +35,60 @@ enum class Destination(val label: String) { Command("Command"), Tools("Tools"), 
 
 class AgentViewModel : ViewModel() {
     var gatewayUrl by mutableStateOf("")
-    var pairingCode by mutableStateOf("")
     var paired by mutableStateOf(false)
-    var status by mutableStateOf("Gateway not paired")
+    var enrollmentAvailable by mutableStateOf(false)
+    var status by mutableStateOf("Gateway discovery pending")
+    var providerState by mutableStateOf("Provider configuration will be checked after Trust & connect")
     var routeState by mutableStateOf(HudRouteStates.idle)
     var answer by mutableStateOf("")
     var enabled by mutableStateOf(setOf<String>())
     private lateinit var vault: TokenVault
     private lateinit var memoryStore: MemoryStore
+    private lateinit var managedConfig: ManagedGatewayConfig
     private val client = GatewayClient()
-    fun initialize(activity: ComponentActivity) { vault = TokenVault(activity); memoryStore = MemoryStore(activity); paired = vault.load() != null; if (paired) status = "Paired token stored on device" }
-    suspend fun pair() { try { val result = client.pair(gatewayUrl, "WhiteRabbit Neo Android", pairingCode); vault.save(result.token); paired = true; routeState = HudRouteStates.idle; status = "Paired as ${result.deviceId.take(8)}…" } catch (e: Exception) { routeState = HudRouteStates.failure(e.message ?: "Pairing failed"); status = routeState.detail } }
+    fun initialize(activity: ComponentActivity) {
+        vault = TokenVault(activity)
+        memoryStore = MemoryStore(activity)
+        managedConfig = ManagedGatewayConfig.load(activity)
+        gatewayUrl = managedConfig.gatewayUrl
+        enrollmentAvailable = managedConfig.isComplete
+        paired = vault.load() != null
+        status = when {
+            paired -> "Trusted gateway token stored on device"
+            enrollmentAvailable -> "Trusted gateway configuration found"
+            else -> "Managed gateway configuration is required before enrollment"
+        }
+    }
+    private fun readiness(localEnabled: Boolean, localModel: String, cloudEnabled: Boolean, cloudModel: String): String = when {
+        localEnabled -> "Local Ollama configured: $localModel"
+        cloudEnabled -> "Authorized cloud fallback configured: $cloudModel"
+        else -> "Provider configuration required: enable local Ollama or an authorized cloud fallback"
+    }
+    suspend fun trustAndConnect() {
+        try {
+            check(enrollmentAvailable) { "Managed gateway configuration is not available" }
+            status = "Checking trusted gateway…"
+            val health = client.health(gatewayUrl)
+            providerState = readiness(health.localOllamaEnabled, health.localOllamaModel, health.authorizedCloudFallbackEnabled, health.cloudModel)
+            val result = client.pair(gatewayUrl, managedConfig.deviceName, managedConfig.enrollmentCode)
+            vault.save(result.token)
+            paired = true
+            routeState = HudRouteStates.idle
+            status = "Trusted gateway connected as ${result.deviceId.take(8)}…"
+        } catch (e: Exception) {
+            routeState = HudRouteStates.failure(e.message ?: "Trusted gateway connection failed")
+            status = routeState.detail
+        }
+    }
+    suspend fun refreshReadiness() {
+        try {
+            val health = client.health(gatewayUrl)
+            providerState = readiness(health.localOllamaEnabled, health.localOllamaModel, health.authorizedCloudFallbackEnabled, health.cloudModel)
+            status = "Gateway readiness refreshed"
+        } catch (e: Exception) {
+            providerState = e.message ?: "Gateway readiness unavailable"
+        }
+    }
     suspend fun run(prompt: String) { try { val token = vault.load() ?: error("Pair the gateway first"); routeState = HudRouteStates.running; status = routeState.detail; val result = client.task(gatewayUrl, token, prompt, enabled); routeState = HudRouteStates.fromTask(result.status, result.route); status = routeState.detail; answer = result.answer } catch (e: Exception) { routeState = HudRouteStates.failure(e.message ?: "Task failed"); status = routeState.detail } }
     suspend fun addRegistry(kind: String, name: String, definition: JSONObject) { try { val token = vault.load() ?: error("Pair the gateway first"); client.createRegistryItem(gatewayUrl, token, kind, name, definition); status = "$kind added to registry" } catch (e: Exception) { status = e.message ?: "Registry update failed" } }
     fun memory(): List<String> = if (::memoryStore.isInitialized) memoryStore.list() else emptyList()
@@ -82,8 +126,7 @@ fun WhiteRabbitApp(activity: ComponentActivity, vm: AgentViewModel = viewModel()
 @Composable private fun StatusCard(status: String, paired: Boolean, routeState: HudRouteState) = Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(14.dp)) { Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Column { Text(if (paired) "SECURE GATEWAY LINK" else "SETUP REQUIRED", color = Mint, style = MaterialTheme.typography.labelMedium); Text(status, color = Muted, style = MaterialTheme.typography.bodySmall) }; AssistChip(onClick = {}, label = { Text(if (paired) routeState.mode.chip else "OFFLINE") }) } }
 
 @Composable private fun CommandScreen(vm: AgentViewModel) { val scope = rememberCoroutineScope(); var prompt by remember { mutableStateOf("") }; var web by remember { mutableStateOf(false) }; var api by remember { mutableStateOf(false) }; var automation by remember { mutableStateOf(false) }; Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-    OutlinedTextField(value = vm.gatewayUrl, onValueChange = { vm.gatewayUrl = it }, label = { Text("HTTPS gateway URL") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-    if (!vm.paired) { OutlinedTextField(value = vm.pairingCode, onValueChange = { vm.pairingCode = it }, label = { Text("One-time pairing code") }, modifier = Modifier.fillMaxWidth(), singleLine = true); Button(onClick = { scope.launch { vm.pair() } }, modifier = Modifier.fillMaxWidth()) { Text("Pair this device") } }
+    Card(colors = CardDefaults.cardColors(containerColor = Panel)) { Column(Modifier.padding(12.dp)) { Text("TRUSTED GATEWAY SETUP", color = Mint, fontWeight = FontWeight.Bold); Text(if (vm.enrollmentAvailable) vm.gatewayUrl else "Managed gateway configuration unavailable", color = Muted, style = MaterialTheme.typography.bodySmall); Text(vm.providerState, color = Muted, style = MaterialTheme.typography.bodySmall); if (!vm.paired) { Button(onClick = { scope.launch { vm.trustAndConnect() } }, enabled = vm.enrollmentAvailable, modifier = Modifier.fillMaxWidth()) { Text("Trust & connect") } } else { OutlinedButton(onClick = { scope.launch { vm.refreshReadiness() } }, modifier = Modifier.fillMaxWidth()) { Text("Refresh gateway readiness") } } } }
     Text("Capability selection", color = Mint, fontWeight = FontWeight.Bold)
     CapabilityToggle("Web read — public HTTPS only", web) { web = it; vm.enabled = vm.enabled.toMutableSet().apply { if (it) add("web_read") else remove("web_read") } }
     CapabilityToggle("API calls — gateway-authorized only", api) { api = it; vm.enabled = vm.enabled.toMutableSet().apply { if (it) add("api_call") else remove("api_call") } }

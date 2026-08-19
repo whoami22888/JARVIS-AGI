@@ -10,6 +10,9 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.WhiteRabbitNeo"
         android:usesCleartextTraffic="false">
+        <meta-data
+            android:name="android.content.APP_RESTRICTIONS"
+            android:resource="@xml/app_restrictions" />
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
