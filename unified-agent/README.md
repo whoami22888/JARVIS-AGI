@@ -50,6 +50,12 @@ cp .env.example .env
 
 The mobile client intentionally rejects `http://` gateway addresses. Place the FastAPI service behind HTTPS before pairing a physical Android device. A `Caddyfile.example` is included for the TLS reverse-proxy boundary.
 
+### Optional local gateway discovery
+
+Set `GATEWAY_DISCOVERY_ENABLED=true` only when the gateway host and Android device share a trusted local network. Configure the advertised gateway name, HTTPS URL, and the host's local IPv4 or IPv6 address in `.env`. The gateway then advertises the `_whiterabbit-gateway._tcp` service through local mDNS. In the Android client, the user taps **Find local gateways**, reviews the advertised HTTPS candidates, and explicitly selects one.
+
+Discovery is not authentication: the app does not connect or pair automatically. The selected gateway must have a valid HTTPS certificate and match the URL supplied through the device-owner managed configuration. The enrollment code stays in that managed configuration rather than appearing in the user interface, but the gateway still requires it before issuing a device token. Do not enable local discovery on untrusted or public networks.
+
 For local gateway development only, run:
 
 ```bash
@@ -94,13 +100,13 @@ cd android
 
 The signed APK is written to `android/app/build/outputs/apk/release/app-release.apk`. Store the keystore and its passwords in an owner-controlled secret vault; they are needed for every future update to the same application ID.
 
-## Android pairing flow
+## Android trusted-enrollment flow
 
-1. Deploy the gateway behind a publicly reachable HTTPS hostname you control.
-2. Start the Android app and enter the HTTPS gateway URL.
-3. Enter the one-time pairing code configured at the gateway.
-4. The client stores the expiring device token using the Android keystore-backed vault when available.
-5. Submit a prompt through the Command destination. The gateway will route only through the configured authorized endpoint.
+1. Deploy the gateway behind an HTTPS hostname you control and configure its one-time enrollment code server-side.
+2. Set the device-owner managed configuration keys `gateway_url`, `enrollment_code`, and optionally `device_name`; see `docs/TRUSTED_ENROLLMENT.md` for the restriction schema.
+3. In the app, optionally scan the current trusted local network, select the advertised gateway that matches `gateway_url`, and tap **Trust & connect**.
+4. The app supplies the managed enrollment code only to the configured HTTPS gateway, then stores the expiring device token using the Android keystore-backed vault.
+5. Submit a prompt through the Command destination. The gateway routes only through the configured authorized endpoint.
 
 ## Validation commands
 
@@ -108,6 +114,8 @@ The signed APK is written to `android/app/build/outputs/apk/release/app-release.
 bash -n bootstrap_backend.sh && bash -n bootstrap_android.sh
 python3 -m py_compile backend/app/*.py
 PYTHONPATH=backend python3 backend/tests/provider_response_validation_test.py
+PYTHONPATH=backend python3 backend/tests/discovery_validation_test.py
+PYTHONPATH=backend python3 backend/tests/discovery_advertiser_test.py
 PYTHONPATH=backend python3 backend/tests/smoke_test.py
 cd android && ./gradlew --no-daemon :app:assembleDebug
 ```

@@ -19,6 +19,10 @@ class Settings:
     deepseek_api_key: str
     deepseek_base_url: str
     deepseek_model: str
+    gateway_discovery_enabled: bool
+    gateway_discovery_name: str
+    gateway_discovery_url: str
+    gateway_discovery_address: str
 
 
 def settings() -> Settings:
@@ -35,4 +39,8 @@ def settings() -> Settings:
         deepseek_api_key=os.getenv("DEEPSEEK_API_KEY", ""),
         deepseek_base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com").rstrip("/"),
         deepseek_model=os.getenv("DEEPSEEK_MODEL", "deepseek-reasoner"),
+        gateway_discovery_enabled=_enabled("GATEWAY_DISCOVERY_ENABLED", False),
+        gateway_discovery_name=os.getenv("GATEWAY_DISCOVERY_NAME", "WhiteRabbit Gateway").strip(),
+        gateway_discovery_url=os.getenv("GATEWAY_DISCOVERY_URL", "").strip().rstrip("/"),
+        gateway_discovery_address=os.getenv("GATEWAY_DISCOVERY_ADDRESS", "").strip(),
     )

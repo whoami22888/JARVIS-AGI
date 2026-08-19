@@ -4,6 +4,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 
 from .config import settings
 from .db import Store
+from .discovery import GatewayAdvertiser
 from .models import AutomationProposal, PairRequest, PairResponse, RegistryCreate, TaskRequest
 from .policy import PolicyError, validate_registry_definition
 from .provider import ProviderError, complete
@@ -11,7 +12,18 @@ from .security import issue_token, pairing_matches, verify_token
 
 cfg = settings()
 store = Store(cfg.data_dir)
+advertiser = GatewayAdvertiser(cfg)
 app = FastAPI(title="WhiteRabbit Neo Unified Agent Gateway", version="0.2.0")
+
+
+@app.on_event("startup")
+def start_gateway_advertisement() -> None:
+    advertiser.start()
+
+
+@app.on_event("shutdown")
+def stop_gateway_advertisement() -> None:
+    advertiser.stop()
 
 
 def authenticated_device(authorization: str | None = Header(default=None)) -> str:
@@ -31,6 +43,7 @@ def health():
         "local_ollama_model": cfg.local_ollama_model,
         "authorized_cloud_fallback_enabled": cfg.cloud_fallback_enabled and bool(cfg.deepseek_api_key),
         "cloud_model": cfg.deepseek_model,
+        "local_discovery_enabled": cfg.gateway_discovery_enabled,
     }
 
 

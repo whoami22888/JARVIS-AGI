@@ -3,7 +3,6 @@ package im.whiterabbitneo.unified
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,7 +16,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
+import im.whiterabbitneo.unified.data.GatewayCandidate
 import im.whiterabbitneo.unified.data.GatewayClient
+import im.whiterabbitneo.unified.data.GatewayDiscovery
 import im.whiterabbitneo.unified.data.HudRouteState
 import im.whiterabbitneo.unified.data.HudRouteStates
 import im.whiterabbitneo.unified.data.ManagedGatewayConfig
@@ -35,6 +36,7 @@ enum class Destination(val label: String) { Command("Command"), Tools("Tools"), 
 
 class AgentViewModel : ViewModel() {
     var gatewayUrl by mutableStateOf("")
+    var selectedGatewayUrl by mutableStateOf("")
     var paired by mutableStateOf(false)
     var enrollmentAvailable by mutableStateOf(false)
     var status by mutableStateOf("Gateway discovery pending")
@@ -42,31 +44,72 @@ class AgentViewModel : ViewModel() {
     var routeState by mutableStateOf(HudRouteStates.idle)
     var answer by mutableStateOf("")
     var enabled by mutableStateOf(setOf<String>())
+    var discoveredGateways by mutableStateOf(emptyList<GatewayCandidate>())
+    var scanningGateways by mutableStateOf(false)
+
     private lateinit var vault: TokenVault
     private lateinit var memoryStore: MemoryStore
     private lateinit var managedConfig: ManagedGatewayConfig
+    private var discovery: GatewayDiscovery? = null
     private val client = GatewayClient()
+
+    private val trustedSelection: Boolean
+        get() = enrollmentAvailable && normalize(selectedGatewayUrl) == normalize(managedConfig.gatewayUrl)
+
     fun initialize(activity: ComponentActivity) {
         vault = TokenVault(activity)
         memoryStore = MemoryStore(activity)
         managedConfig = ManagedGatewayConfig.load(activity)
         gatewayUrl = managedConfig.gatewayUrl
+        selectedGatewayUrl = managedConfig.gatewayUrl
         enrollmentAvailable = managedConfig.isComplete
         paired = vault.load() != null
         status = when {
             paired -> "Trusted gateway token stored on device"
-            enrollmentAvailable -> "Trusted gateway configuration found"
+            enrollmentAvailable -> "Select the advertised trusted gateway or connect to the managed gateway"
             else -> "Managed gateway configuration is required before enrollment"
         }
+        discovery = GatewayDiscovery(
+            activity,
+            onCandidatesChanged = { discoveredGateways = it },
+            onStatusChanged = { message ->
+                status = message
+                if (!message.startsWith("Scanning")) scanningGateways = false
+            },
+        )
     }
+
+    fun scanForGateways() {
+        if (!::vault.isInitialized) return
+        scanningGateways = true
+        status = "Scanning the local network for advertised gateways…"
+        discovery?.start()
+    }
+
+    fun selectGateway(candidate: GatewayCandidate) {
+        selectedGatewayUrl = candidate.url
+        if (trustedSelection) {
+            gatewayUrl = managedConfig.gatewayUrl
+            status = "Selected the managed trusted gateway: ${candidate.serviceName}."
+        } else {
+            status = if (enrollmentAvailable) {
+                "${candidate.serviceName} is not the gateway approved by this device configuration."
+            } else {
+                "${candidate.serviceName} was discovered, but this device has no managed enrollment configuration."
+            }
+        }
+    }
+
     private fun readiness(localEnabled: Boolean, localModel: String, cloudEnabled: Boolean, cloudModel: String): String = when {
         localEnabled -> "Local Ollama configured: $localModel"
         cloudEnabled -> "Authorized cloud fallback configured: $cloudModel"
         else -> "Provider configuration required: enable local Ollama or an authorized cloud fallback"
     }
+
     suspend fun trustAndConnect() {
         try {
             check(enrollmentAvailable) { "Managed gateway configuration is not available" }
+            check(trustedSelection) { "Select the advertised gateway approved for this device before connecting" }
             status = "Checking trusted gateway…"
             val health = client.health(gatewayUrl)
             providerState = readiness(health.localOllamaEnabled, health.localOllamaModel, health.authorizedCloudFallbackEnabled, health.cloudModel)
@@ -80,6 +123,7 @@ class AgentViewModel : ViewModel() {
             status = routeState.detail
         }
     }
+
     suspend fun refreshReadiness() {
         try {
             val health = client.health(gatewayUrl)
@@ -89,11 +133,23 @@ class AgentViewModel : ViewModel() {
             providerState = e.message ?: "Gateway readiness unavailable"
         }
     }
-    suspend fun run(prompt: String) { try { val token = vault.load() ?: error("Pair the gateway first"); routeState = HudRouteStates.running; status = routeState.detail; val result = client.task(gatewayUrl, token, prompt, enabled); routeState = HudRouteStates.fromTask(result.status, result.route); status = routeState.detail; answer = result.answer } catch (e: Exception) { routeState = HudRouteStates.failure(e.message ?: "Task failed"); status = routeState.detail } }
-    suspend fun addRegistry(kind: String, name: String, definition: JSONObject) { try { val token = vault.load() ?: error("Pair the gateway first"); client.createRegistryItem(gatewayUrl, token, kind, name, definition); status = "$kind added to registry" } catch (e: Exception) { status = e.message ?: "Registry update failed" } }
+
+    fun disconnect() {
+        if (::vault.isInitialized) vault.clear()
+        paired = false
+        answer = ""
+        routeState = HudRouteStates.idle
+        status = "Gateway disconnected. Select and connect a trusted gateway to continue."
+    }
+
+    suspend fun run(prompt: String) { try { val token = vault.load() ?: error("Connect to the trusted gateway first"); routeState = HudRouteStates.running; status = routeState.detail; val result = client.task(gatewayUrl, token, prompt, enabled); routeState = HudRouteStates.fromTask(result.status, result.route); status = routeState.detail; answer = result.answer } catch (e: Exception) { routeState = HudRouteStates.failure(e.message ?: "Task failed"); status = routeState.detail } }
+    suspend fun addRegistry(kind: String, name: String, definition: JSONObject) { try { val token = vault.load() ?: error("Connect to the trusted gateway first"); client.createRegistryItem(gatewayUrl, token, kind, name, definition); status = "$kind added to registry" } catch (e: Exception) { status = e.message ?: "Registry update failed" } }
     fun memory(): List<String> = if (::memoryStore.isInitialized) memoryStore.list() else emptyList()
     fun addMemory(note: String) { memoryStore.add(note) }
     fun deleteMemory(note: String) { memoryStore.delete(note) }
+    override fun onCleared() { discovery?.stop(silent = true); super.onCleared() }
+
+    private fun normalize(value: String): String = value.trimEnd('/').lowercase()
 }
 
 class MainActivity : ComponentActivity() {
@@ -126,7 +182,27 @@ fun WhiteRabbitApp(activity: ComponentActivity, vm: AgentViewModel = viewModel()
 @Composable private fun StatusCard(status: String, paired: Boolean, routeState: HudRouteState) = Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(14.dp)) { Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Column { Text(if (paired) "SECURE GATEWAY LINK" else "SETUP REQUIRED", color = Mint, style = MaterialTheme.typography.labelMedium); Text(status, color = Muted, style = MaterialTheme.typography.bodySmall) }; AssistChip(onClick = {}, label = { Text(if (paired) routeState.mode.chip else "OFFLINE") }) } }
 
 @Composable private fun CommandScreen(vm: AgentViewModel) { val scope = rememberCoroutineScope(); var prompt by remember { mutableStateOf("") }; var web by remember { mutableStateOf(false) }; var api by remember { mutableStateOf(false) }; var automation by remember { mutableStateOf(false) }; Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-    Card(colors = CardDefaults.cardColors(containerColor = Panel)) { Column(Modifier.padding(12.dp)) { Text("TRUSTED GATEWAY SETUP", color = Mint, fontWeight = FontWeight.Bold); Text(if (vm.enrollmentAvailable) vm.gatewayUrl else "Managed gateway configuration unavailable", color = Muted, style = MaterialTheme.typography.bodySmall); Text(vm.providerState, color = Muted, style = MaterialTheme.typography.bodySmall); if (!vm.paired) { Button(onClick = { scope.launch { vm.trustAndConnect() } }, enabled = vm.enrollmentAvailable, modifier = Modifier.fillMaxWidth()) { Text("Trust & connect") } } else { OutlinedButton(onClick = { scope.launch { vm.refreshReadiness() } }, modifier = Modifier.fillMaxWidth()) { Text("Refresh gateway readiness") } } } }
+    Card(colors = CardDefaults.cardColors(containerColor = Panel)) { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("TRUSTED GATEWAY SETUP", color = Mint, fontWeight = FontWeight.Bold)
+        Text(if (vm.enrollmentAvailable) vm.gatewayUrl else "Managed gateway configuration unavailable", color = Muted, style = MaterialTheme.typography.bodySmall)
+        Text(vm.providerState, color = Muted, style = MaterialTheme.typography.bodySmall)
+        Button(onClick = { vm.scanForGateways() }, enabled = !vm.scanningGateways, modifier = Modifier.fillMaxWidth()) { Text(if (vm.scanningGateways) "Scanning local network…" else "Find local gateways") }
+        if (vm.discoveredGateways.isNotEmpty()) {
+            Text("Advertised local gateways", color = Mint, fontWeight = FontWeight.Bold)
+            vm.discoveredGateways.forEach { candidate ->
+                OutlinedButton(onClick = { vm.selectGateway(candidate) }, modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.fillMaxWidth()) { Text(candidate.serviceName); Text(candidate.url, style = MaterialTheme.typography.bodySmall) }
+                }
+            }
+        }
+        Text("Discovery does not grant access. The selected gateway must match the device-owner HTTPS configuration before the hidden managed enrollment code can authorize this device.", color = Muted, style = MaterialTheme.typography.bodySmall)
+        if (!vm.paired) {
+            Button(onClick = { scope.launch { vm.trustAndConnect() } }, enabled = vm.enrollmentAvailable, modifier = Modifier.fillMaxWidth()) { Text("Trust & connect") }
+        } else {
+            OutlinedButton(onClick = { scope.launch { vm.refreshReadiness() } }, modifier = Modifier.fillMaxWidth()) { Text("Refresh gateway readiness") }
+            OutlinedButton(onClick = { vm.disconnect() }, modifier = Modifier.fillMaxWidth()) { Text("Disconnect gateway") }
+        }
+    } }
     Text("Capability selection", color = Mint, fontWeight = FontWeight.Bold)
     CapabilityToggle("Web read — public HTTPS only", web) { web = it; vm.enabled = vm.enabled.toMutableSet().apply { if (it) add("web_read") else remove("web_read") } }
     CapabilityToggle("API calls — gateway-authorized only", api) { api = it; vm.enabled = vm.enabled.toMutableSet().apply { if (it) add("api_call") else remove("api_call") } }
