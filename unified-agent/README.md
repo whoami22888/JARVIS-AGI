@@ -79,6 +79,21 @@ android/app/build/outputs/apk/debug/app-debug.apk
 
 A debug APK is suitable only for test installation. Release distribution requires an owner-controlled keystore and a release signing configuration. A rebuilt application has a different signing certificate than the reference package and therefore cannot update it in place.
 
+### Build a signed release APK
+
+Keep the keystore and passwords outside the repository. The release task requires the four transient Gradle properties below and fails rather than silently using the debug key when any is absent.
+
+```bash
+cd android
+./gradlew --no-daemon :app:assembleRelease \\
+  -PRELEASE_STORE_FILE=/secure/path/whiterabbit-neo-unified-release.jks \\
+  -PRELEASE_STORE_PASSWORD='store-password' \\
+  -PRELEASE_KEY_ALIAS='whiterabbitneo_release' \\
+  -PRELEASE_KEY_PASSWORD='key-password'
+```
+
+The signed APK is written to `android/app/build/outputs/apk/release/app-release.apk`. Store the keystore and its passwords in an owner-controlled secret vault; they are needed for every future update to the same application ID.
+
 ## Android pairing flow
 
 1. Deploy the gateway behind a publicly reachable HTTPS hostname you control.
