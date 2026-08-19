@@ -51,24 +51,41 @@ while True:
         speech = speech[6:].strip()
         print("Updated Speech:", speech)
 
-        response_img_or_text = concurrent.futures.ThreadPoolExecutor().submit(deepInfra_TEXT.generate, [{"role": "user", "content": "Text to Classify -->" + speech}], system_prompt=BISECTORS.image_requests_v3)
-        response_classifier = concurrent.futures.ThreadPoolExecutor().submit(deepInfra_TEXT.generate, [{"role": "user", "content": "Text to Classify -->" + speech}], system_prompt=BISECTORS.complex_task_classifier_v6, stream=False)
-        default_response = concurrent.futures.ThreadPoolExecutor().submit(deepInfra_TEXT.generate, history_manager.history, system_prompt=INSTRUCTIONS.human_response_v3_AVA, stream=False)
-        
-        concurrent.futures.wait([response_img_or_text, response_classifier, default_response])
-        print("Response Classifier >> ", "\033[91m" + response_classifier.result() + "\033[0m")
-        print("Image or Text Classifier >> ", "\033[91m" + response_img_or_text.result() + "\033[0m")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+            response_img_or_text = executor.submit(
+                deepInfra_TEXT.generate,
+                [{"role": "user", "content": "Text to Classify -->" + speech}],
+                system_prompt=BISECTORS.image_requests_v3,
+            )
+            response_classifier = executor.submit(
+                deepInfra_TEXT.generate,
+                [{"role": "user", "content": "Text to Classify -->" + speech}],
+                system_prompt=BISECTORS.complex_task_classifier_v6,
+                stream=False,
+            )
+            default_response = executor.submit(
+                deepInfra_TEXT.generate,
+                history_manager.history,
+                system_prompt=INSTRUCTIONS.human_response_v3_AVA,
+                stream=False,
+            )
+            response_img_or_text_text = response_img_or_text.result()
+            response_classifier_text = response_classifier.result()
+            default_response_text = default_response.result()
 
-        if "yes" in response_img_or_text.result().lower():
+        print("Response Classifier >> ", "\033[91m" + response_classifier_text + "\033[0m")
+        print("Image or Text Classifier >> ", "\033[91m" + response_img_or_text_text + "\033[0m")
+
+        if "yes" in response_img_or_text_text.lower():
             speak("Sure Sir, Generating Your Image")
             decohere_ai.generate(speech)
             continue
         
-        elif all(x in response_classifier.result().lower() for x in ("vision", "website", "call", "youtube")):
+        elif all(x in response_classifier_text.lower() for x in ("vision", "website", "call", "youtube")):
             print("\033[91mConfused with Classification. Using Default Response\033[0m")
-            speak(default_response.result())
+            speak(default_response_text)
 
-        elif "system control" in response_classifier.result().lower():
+        elif "system control" in response_classifier_text.lower():
             # Create a ThreadPoolExecutor and submit the speak function
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 speak_future = executor.submit(speak, "Sure Sir. Setting the Required Settings")
@@ -85,27 +102,29 @@ while True:
 
                 speak_future.result()
 
-        elif "vision" in response_classifier.result().lower():
-            concurrent.futures.ThreadPoolExecutor().submit(speak("Analysing, Please Wait"))
-            image_path = camera_vision.realtime_vision()
-            response_vison = deepInfra_VISION.generate(speech, system_prompt=INSTRUCTIONS.vison_realtime_v1, image_path=image_path)
+        elif "vision" in response_classifier_text.lower():
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                speaking = executor.submit(speak, "Analysing, Please Wait")
+                image_path = camera_vision.realtime_vision()
+                response_vison = deepInfra_VISION.generate(speech, system_prompt=INSTRUCTIONS.vison_realtime_v1, image_path=image_path)
+                speaking.result()
             print("AI>>", response_vison)
             os.remove(image_path)
             speak(response_vison)
 
-        elif "call" in response_classifier.result().lower():
+        elif "call" in response_classifier_text.lower():
             speak("Sure Sir. Calling")
             # make_call.call()
 
-        elif "website" in response_classifier.result().lower():
+        elif "website" in response_classifier_text.lower():
             site_markdown = jenna_reader.fetch_website_content(chrome_latest_url.get_latest_chrome_url())
             response = openrouter.generate(f"METEDATA: {site_markdown}\n\nQUERY: {speech}", system_prompt="Keep you responses very short and concise")
             speak(response, voice="Salli")
 
         else: 
             # taskExecutor.process_query(speech)
-            print("AI>>", default_response.result())
-            speak(default_response.result())
+            print("AI>>", default_response_text)
+            speak(default_response_text)
 
     else:
         history_manager.store_history(history_manager.history + [{"role": "user", "content": speech}])

@@ -92,6 +92,7 @@ A debug APK is suitable only for test installation. Release distribution require
 ```bash
 bash -n bootstrap_backend.sh && bash -n bootstrap_android.sh
 python3 -m py_compile backend/app/*.py
+PYTHONPATH=backend python3 backend/tests/provider_response_validation_test.py
 PYTHONPATH=backend python3 backend/tests/smoke_test.py
 cd android && ./gradlew --no-daemon :app:assembleDebug
 ```

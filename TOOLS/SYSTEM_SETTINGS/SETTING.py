@@ -1,4 +1,4 @@
-"""
+r"""
 [System Theme]
 Computer\HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize\SystemUsesLightTheme (DWORD: 0 = Dark, 1 = Light)
 
