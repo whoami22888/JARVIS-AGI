@@ -1,0 +1,1 @@
+{"job_id":"job-20260822T171753.563283676Z","status":"TESTED","result":{"target":"127.0.0.1","port":18443,"reachable":true,"remote_addr":"127.0.0.1:18443","duration_ns":169937,"observed_at":"2026-08-22T17:17:53.564165434Z"},"evidence_id":"tcp_connect-20260822T171753.564445299Z-54948e9a842a","evidence_sha256":"54948e9a842af75782d25d1313f2222648a1949895c7f3252edfb7a81cdbbdd3"}

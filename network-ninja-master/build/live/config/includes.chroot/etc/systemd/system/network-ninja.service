@@ -1,0 +1,18 @@
+[Unit]
+Description=Network Ninja Master local dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=HOME=/root
+Environment=NETWORK_NINJA_USB_ROOT=/media/NETWORK_NINJA_USB
+ExecStart=/usr/local/bin/network-ninja serve --addr 127.0.0.1:8000
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=read-only
+
+[Install]
+WantedBy=multi-user.target

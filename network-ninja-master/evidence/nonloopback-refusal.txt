@@ -1,0 +1,1 @@
+ERROR: dashboard may bind only to loopback (for example 127.0.0.1:8000)

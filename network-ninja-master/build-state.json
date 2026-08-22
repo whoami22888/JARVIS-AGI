@@ -1,0 +1,91 @@
+{
+  "release": "0.1.0",
+  "baseline_status": "VALIDATED_SOFTWARE_BASELINE",
+  "generated_at": "2026-08-23T00:00:00+10:00",
+  "features": [
+    {
+      "feature": "Authorized scope engine",
+      "implementation_status": "IMPLEMENTED",
+      "dependencies": ["Go standard library"],
+      "build_status": "PASSED",
+      "unit_test_status": "PASSED",
+      "integration_test_status": "PASSED",
+      "vm_test_status": "NOT_APPLICABLE",
+      "physical_test_status": "NOT_APPLICABLE",
+      "security_status": "PASSED",
+      "evidence": ["evidence/final-scope-validation.json", "evidence/final-denied-port.txt", "internal/scope/scope_test.go"],
+      "known_limitations": ["Exact hostname/IP and CIDR matches only; DNS-to-CIDR authorization expansion is intentionally not implemented."],
+      "last_test_time": "2026-08-23T00:00:00+10:00"
+    },
+    {
+      "feature": "Bounded TCP/TLS/HTTP diagnostics",
+      "implementation_status": "IMPLEMENTED",
+      "dependencies": ["Go standard library", "authorized scope.json"],
+      "build_status": "PASSED",
+      "unit_test_status": "PASSED",
+      "integration_test_status": "PASSED",
+      "vm_test_status": "NOT_APPLICABLE",
+      "physical_test_status": "NOT_APPLICABLE",
+      "security_status": "PASSED",
+      "evidence": ["evidence/final-tcp-loopback.json", "evidence/final-tls-loopback.json", "evidence/final-http-loopback.json", "internal/scan/scan_test.go"],
+      "known_limitations": ["No UDP, packet capture, exploitation, authentication testing, or arbitrary command execution."],
+      "last_test_time": "2026-08-23T00:00:00+10:00"
+    },
+    {
+      "feature": "Host and local device inventory",
+      "implementation_status": "IMPLEMENTED",
+      "dependencies": ["Linux /proc", "Linux /sys"],
+      "build_status": "PASSED",
+      "unit_test_status": "PARTIAL",
+      "integration_test_status": "PASSED",
+      "vm_test_status": "PASSED",
+      "physical_test_status": "BLOCKED",
+      "security_status": "PASSED",
+      "evidence": ["evidence/final-dashboard-host.json", "evidence/final-dashboard-devices.json"],
+      "known_limitations": ["USB attributes depend on operating-system exposure; no ADB/Fastboot support."],
+      "last_test_time": "2026-08-23T00:00:00+10:00"
+    },
+    {
+      "feature": "Loopback dashboard and SQLite job store",
+      "implementation_status": "IMPLEMENTED",
+      "dependencies": ["Go", "SQLite"],
+      "build_status": "PASSED",
+      "unit_test_status": "PARTIAL",
+      "integration_test_status": "PASSED",
+      "vm_test_status": "PASSED",
+      "physical_test_status": "NOT_APPLICABLE",
+      "security_status": "PASSED",
+      "evidence": ["evidence/final-dashboard-health.json", "evidence/final-dashboard-http-scan.json", "evidence/final-dashboard-jobs.json", "evidence/final-nonloopback-refusal.txt"],
+      "known_limitations": ["The dashboard intentionally binds only to loopback and has no remote multi-user access mode."],
+      "last_test_time": "2026-08-23T00:00:00+10:00"
+    },
+    {
+      "feature": "Ventoy candidate deployment",
+      "implementation_status": "IMPLEMENTED_CONFIGURATION_AND_ISO",
+      "dependencies": ["Ventoy installation", "physical USB", "target firmware"],
+      "build_status": "PASSED",
+      "unit_test_status": "PASSED",
+      "integration_test_status": "PASSED",
+      "vm_test_status": "PARTIAL",
+      "physical_test_status": "BLOCKED",
+      "security_status": "PASSED",
+      "evidence": ["dist/network-ninja-master-0.1.0-linux-amd64.iso", "dist/network-ninja-master-0.1.0-linux-amd64.iso.sha256", "evidence/iso-boot-metadata.txt", "evidence/iso-filesystem-list.txt", "evidence/qemu-bios-boot.log"],
+      "known_limitations": ["Physical Ventoy media was unavailable. The current ISO exposes a BIOS El Torito GRUB boot entry; UEFI and physical USB boot remain unverified and must not be claimed as supported."],
+      "last_test_time": "2026-08-23T00:00:00+10:00"
+    },
+    {
+      "feature": "Release packaging, manifest, and SBOM",
+      "implementation_status": "IMPLEMENTED",
+      "dependencies": ["Go module metadata", "sha256sum", "jq"],
+      "build_status": "PASSED",
+      "unit_test_status": "NOT_APPLICABLE",
+      "integration_test_status": "PASSED",
+      "vm_test_status": "NOT_APPLICABLE",
+      "physical_test_status": "NOT_APPLICABLE",
+      "security_status": "PASSED",
+      "evidence": ["evidence/release-file-list.txt", "dist/release/network-ninja-master-0.1.0/SHA256SUMS", "dist/release/network-ninja-master-0.1.0/sbom.json"],
+      "known_limitations": ["Public redistribution requires repository-owner license confirmation."],
+      "last_test_time": "2026-08-23T00:00:00+10:00"
+    }
+  ]
+}

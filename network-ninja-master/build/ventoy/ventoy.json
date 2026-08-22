@@ -1,0 +1,10 @@
+{
+  "persistence": [
+    {
+      "image": "/iso/network-ninja-master-0.1.0-linux-amd64.iso",
+      "backend": "/persistence/network-ninja-master-persistence.dat",
+      "autosel": 1,
+      "timeout": 0
+    }
+  ]
+}

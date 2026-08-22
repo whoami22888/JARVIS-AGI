@@ -1,0 +1,7 @@
+dist/
+build/live/.work/
+*.db
+*.db-shm
+*.db-wal
+network-ninja-data/
+evidence/*.log

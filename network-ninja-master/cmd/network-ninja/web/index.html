@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Network Ninja Master</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1020;--panel:#141c31;--line:#33415e;--text:#edf3ff;--muted:#a9b6d0;--accent:#40d8a7;--danger:#ff7777}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,sans-serif}.wrap{max-width:1200px;margin:auto;padding:28px}header{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;border-bottom:1px solid var(--line);padding-bottom:18px}.brand h1{margin:0;font-size:25px}.brand p{margin:6px 0 0;color:var(--muted)}button{background:var(--accent);border:0;color:#082017;font-weight:700;padding:9px 13px;border-radius:6px;cursor:pointer}button:hover{filter:brightness(1.08)}main{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-top:20px}.wide{grid-column:1/-1}.card{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:17px}.card h2{margin:0 0 12px;font-size:17px}pre{background:#090e1a;border:1px solid #25304a;padding:12px;border-radius:6px;overflow:auto;max-height:330px;white-space:pre-wrap}label{display:block;font-weight:600;margin-top:10px}input,select,textarea{width:100%;margin-top:4px;border:1px solid var(--line);border-radius:5px;padding:9px;background:#090e1a;color:var(--text);font:inherit}textarea{min-height:135px;font-family:ui-monospace,monospace}.result{margin-top:12px}.notice{color:var(--muted);font-size:13px}.error{color:var(--danger)}@media(max-width:760px){main{grid-template-columns:1fr}.wide{grid-column:auto}header{display:block}header button{margin-top:15px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header><div class="brand"><h1>Network Ninja Master</h1><p>Local, scope-enforced diagnostics. This dashboard binds only to the current machine.</p></div><button id="refresh">Refresh live evidence</button></header>
+<main>
+<section class="card"><h2>Runtime health</h2><pre id="health">Loading…</pre></section>
+<section class="card"><h2>Host inventory</h2><pre id="host">Loading…</pre></section>
+<section class="card"><h2 wide>Connected USB and serial devices</h2><pre id="devices">Loading…</pre></section>
+<section class="card"><h2>Authorized diagnostic</h2><p class="notice">A valid, unexpired scope is required. The server rejects targets, ports, and operations that are not allowlisted.</p><form id="scan-form"><label>Operation<select id="operation"><option value="tcp_connect">TCP connect</option><option value="tls_metadata">TLS metadata</option><option value="http_metadata">HTTP headers</option></select></label><label>Target hostname or IP<input id="target" required placeholder="127.0.0.1"></label><label>Port<input id="port" required type="number" min="1" max="65535" value="443"></label><label>HTTP URL (required for HTTP metadata)<input id="url" placeholder="http://127.0.0.1:8080/"></label><label>Scope JSON<textarea id="scope" required placeholder='{"engagement_id":"lab-001",...}'></textarea></label><button type="submit">Run guarded diagnostic</button></form><pre class="result" id="scan-result">No diagnostic requested.</pre></section>
+<section class="card"><h2>Recent jobs</h2><pre id="jobs">Loading…</pre></section>
+</main>
+</div>
+<script>
+const pretty=value=>JSON.stringify(value,null,2);const put=(id,value)=>document.getElementById(id).textContent=pretty(value);
+async function get(path){const r=await fetch(path);const body=await r.json();if(!r.ok)throw new Error(body.error||r.statusText);return body}
+async function refresh(){for(const [id,path] of Object.entries({health:'/api/health',host:'/api/host',devices:'/api/devices',jobs:'/api/jobs'})){try{put(id,await get(path))}catch(e){document.getElementById(id).textContent='ERROR: '+e.message}}}
+document.getElementById('refresh').addEventListener('click',refresh);
+document.getElementById('scan-form').addEventListener('submit',async event=>{event.preventDefault();const out=document.getElementById('scan-result');try{const scope=JSON.parse(document.getElementById('scope').value);const operation=document.getElementById('operation').value;const payload={scope,target:document.getElementById('target').value,port:Number(document.getElementById('port').value),url:document.getElementById('url').value};const r=await fetch('/api/scan/'+operation,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const body=await r.json();out.textContent=pretty(body);if(!r.ok)out.className='result error';else{out.className='result';refresh()}}catch(e){out.textContent='ERROR: '+e.message;out.className='result error'}});
+refresh();
+</script>
+</body>
+</html>

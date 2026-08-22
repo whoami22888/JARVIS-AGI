@@ -1,0 +1,19 @@
+# Minimal runtime dependencies for Network Ninja Master live image.
+# Diagnostic packages are read-only/administrative utilities; no exploit framework,
+# credential tooling, or firmware flasher is included in the initial release.
+linux-image-amd64
+systemd-sysv
+network-manager
+iproute2
+iputils-ping
+ethtool
+usbutils
+pciutils
+ca-certificates
+curl
+openssl
+sqlite3
+bash-completion
+nano
+less
+syslinux-utils
