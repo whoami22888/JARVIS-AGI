@@ -1,91 +1,165 @@
 {
-  "release": "0.2.0",
+  "release": "0.2.1",
   "baseline_status": "VALIDATED_SOFTWARE_BASELINE",
-  "generated_at": "2026-08-23T04:00:00+10:00",
+  "generated_at": "2026-08-23T10:05:00+10:00",
   "features": [
     {
       "feature": "Authorized scope engine and bounded diagnostics",
       "implementation_status": "IMPLEMENTED",
-      "dependencies": ["Go standard library", "authorized scope.json"],
+      "dependencies": [
+        "Go standard library",
+        "authorized scope.json"
+      ],
       "build_status": "PASSED",
       "unit_test_status": "PASSED",
       "integration_test_status": "PASSED",
       "vm_test_status": "NOT_APPLICABLE",
       "physical_test_status": "NOT_APPLICABLE",
       "security_status": "PASSED",
-      "evidence": ["internal/scope/scope_test.go", "internal/scan/scan_test.go", "evidence/final-scope-validation.json", "evidence/final-tcp-loopback.json", "evidence/final-tls-loopback.json", "evidence/final-http-loopback.json"],
-      "known_limitations": ["No UDP, packet capture, exploitation, authentication testing, credential collection, payload delivery, or arbitrary command execution."],
+      "evidence": [
+        "internal/scope/scope_test.go",
+        "internal/scan/scan_test.go",
+        "evidence/final-scope-validation.json",
+        "evidence/final-tcp-loopback.json",
+        "evidence/final-tls-loopback.json",
+        "evidence/final-http-loopback.json"
+      ],
+      "known_limitations": [
+        "No UDP, packet capture, exploitation, authentication testing, credential collection, payload delivery, or arbitrary command execution."
+      ],
       "last_test_time": "2026-08-23T04:00:00+10:00"
     },
     {
       "feature": "Human-approved agent console",
       "implementation_status": "IMPLEMENTED",
-      "dependencies": ["Go", "SQLite", "loopback HTTP server"],
+      "dependencies": [
+        "Go",
+        "SQLite",
+        "loopback HTTP server"
+      ],
       "build_status": "PASSED",
       "unit_test_status": "PASSED",
       "integration_test_status": "PASSED",
       "vm_test_status": "PASSED",
       "physical_test_status": "NOT_APPLICABLE",
       "security_status": "PASSED",
-      "evidence": ["internal/agent/agent_test.go", "evidence/agent-console-status.json", "evidence/agent-console-chat.json", "evidence/agent-console-skill-draft.json", "evidence/agent-console-task-completed.json", "evidence/agent-console-monitor-completed.json", "evidence/agent-console-activity.json", "evidence/agent-console-evidence.sha256"],
-      "known_limitations": ["The first release provides typed read-only local collectors, not mouse/keyboard synthesis, screen capture, arbitrary terminal execution, remote computer control, or autonomous skill execution."],
+      "evidence": [
+        "internal/agent/agent_test.go",
+        "evidence/agent-console-status.json",
+        "evidence/agent-console-chat.json",
+        "evidence/agent-console-skill-draft.json",
+        "evidence/agent-console-task-completed.json",
+        "evidence/agent-console-monitor-completed.json",
+        "evidence/agent-console-activity.json",
+        "evidence/agent-console-evidence.sha256"
+      ],
+      "known_limitations": [
+        "The first release provides typed read-only local collectors, not mouse/keyboard synthesis, screen capture, arbitrary terminal execution, remote computer control, or autonomous skill execution."
+      ],
       "last_test_time": "2026-08-23T04:00:00+10:00"
     },
     {
       "feature": "Contextual local chat, memory, and skills",
       "implementation_status": "IMPLEMENTED",
-      "dependencies": ["SQLite local state"],
+      "dependencies": [
+        "SQLite local state"
+      ],
       "build_status": "PASSED",
       "unit_test_status": "PASSED",
       "integration_test_status": "PASSED",
       "vm_test_status": "NOT_APPLICABLE",
       "physical_test_status": "NOT_APPLICABLE",
       "security_status": "PASSED",
-      "evidence": ["internal/agent/agent_test.go", "evidence/agent-console-chat.json", "evidence/agent-console-skill-approved.json", "docs/AGENT_CONSOLE_ARCHITECTURE.md"],
-      "known_limitations": ["Default reasoning is a deterministic local context builder. An optional text-only model endpoint may enrich chat but has no execution authority. Chat-added skills remain inert local records until reviewed."],
+      "evidence": [
+        "internal/agent/agent_test.go",
+        "evidence/agent-console-chat.json",
+        "evidence/agent-console-skill-approved.json",
+        "docs/AGENT_CONSOLE_ARCHITECTURE.md"
+      ],
+      "known_limitations": [
+        "Default reasoning is a deterministic local context builder. An optional text-only model endpoint may enrich chat but has no execution authority. Chat-added skills remain inert local records until reviewed."
+      ],
       "last_test_time": "2026-08-23T04:00:00+10:00"
     },
     {
       "feature": "Loopback backend, task orchestration, and endpoint monitoring snapshot",
       "implementation_status": "IMPLEMENTED",
-      "dependencies": ["Go", "SQLite", "Linux /proc and /sys"],
+      "dependencies": [
+        "Go",
+        "SQLite",
+        "Linux /proc and /sys"
+      ],
       "build_status": "PASSED",
       "unit_test_status": "PASSED",
       "integration_test_status": "PASSED",
       "vm_test_status": "PASSED",
       "physical_test_status": "BLOCKED",
       "security_status": "PASSED",
-      "evidence": ["evidence/agent-console-proposal.json", "evidence/agent-console-takeover-start.json", "evidence/agent-console-takeover-refusal.json", "evidence/agent-console-task-completed.json", "evidence/agent-console-cancelled.json", "evidence/agent-console-nonloopback-refusal.txt"],
-      "known_limitations": ["Monitoring is manually invoked and visible in this release; there is no hidden background collector or remote listener."],
+      "evidence": [
+        "evidence/agent-console-proposal.json",
+        "evidence/agent-console-takeover-start.json",
+        "evidence/agent-console-takeover-refusal.json",
+        "evidence/agent-console-task-completed.json",
+        "evidence/agent-console-cancelled.json",
+        "evidence/agent-console-nonloopback-refusal.txt"
+      ],
+      "known_limitations": [
+        "Monitoring is manually invoked and visible in this release; there is no hidden background collector or remote listener."
+      ],
       "last_test_time": "2026-08-23T04:00:00+10:00"
     },
     {
       "feature": "Ventoy candidate deployment and embedded agent-console runtime",
       "implementation_status": "IMPLEMENTED_CONFIGURATION_AND_ISO",
-      "dependencies": ["Ventoy installation", "physical USB", "target firmware"],
+      "dependencies": [
+        "Ventoy installation",
+        "physical USB",
+        "target firmware"
+      ],
       "build_status": "PASSED",
       "unit_test_status": "PASSED",
       "integration_test_status": "PASSED",
       "vm_test_status": "PARTIAL",
       "physical_test_status": "BLOCKED",
       "security_status": "PASSED",
-      "evidence": ["dist/network-ninja-master-0.2.0-linux-amd64.iso", "dist/network-ninja-master-0.2.0-linux-amd64.iso.sha256", "evidence/v020-iso-boot-metadata.txt", "evidence/v020-iso-extract.log", "evidence/v020-iso-inspection.sha256"],
-      "known_limitations": ["The 0.2.0 ISO content and extracted runtime were tested. Physical Ventoy media, a full boot on physical hardware, and UEFI boot remain unverified and must not be represented as passing."],
-      "last_test_time": "2026-08-23T04:00:00+10:00"
+      "evidence": [
+        "dist/network-ninja-master-0.2.1-linux-amd64.iso",
+        "dist/network-ninja-master-0.2.1-linux-amd64.iso.sha256",
+        "evidence/patch-release-v021/iso-boot-metadata.txt",
+        "evidence/patch-release-v021/iso-extract.log",
+        "evidence/patch-release-v021/qemu-bios-boot.log",
+        "evidence/patch-release-v021/ventoy-config-validation.json",
+        "evidence/patch-release-v021/persistence-image.sha256"
+      ],
+      "known_limitations": [
+        "The 0.2.1 ISO content, extracted runtime, Ventoy persistence configuration, and BIOS QEMU early boot were tested. Physical Ventoy media, persistence across a physical reboot, UEFI boot, and Secure Boot remain unverified and must not be represented as passing."
+      ],
+      "last_test_time": "2026-08-23T10:05:00+10:00"
     },
     {
       "feature": "Release packaging, manifest, and SBOM",
       "implementation_status": "IMPLEMENTED",
-      "dependencies": ["Go module metadata", "sha256sum", "jq"],
+      "dependencies": [
+        "Go module metadata",
+        "sha256sum",
+        "jq"
+      ],
       "build_status": "PASSED",
       "unit_test_status": "NOT_APPLICABLE",
       "integration_test_status": "PASSED",
       "vm_test_status": "NOT_APPLICABLE",
       "physical_test_status": "NOT_APPLICABLE",
       "security_status": "PASSED",
-      "evidence": ["dist/release/network-ninja-master-0.2.0/SHA256SUMS", "dist/release/network-ninja-master-0.2.0/sbom.json", "dist/network-ninja-master-0.2.0-release.zip", "dist/network-ninja-master-0.2.0-release.zip.sha256"],
-      "known_limitations": ["Public redistribution requires repository-owner license confirmation."],
-      "last_test_time": "2026-08-23T04:00:00+10:00"
+      "evidence": [
+        "dist/release/network-ninja-master-0.2.1/SHA256SUMS",
+        "dist/release/network-ninja-master-0.2.1/sbom.json",
+        "dist/network-ninja-master-0.2.1-release.zip",
+        "dist/network-ninja-master-0.2.1-release.zip.sha256"
+      ],
+      "known_limitations": [
+        "Public redistribution requires repository-owner license confirmation."
+      ],
+      "last_test_time": "2026-08-23T10:10:00+10:00"
     }
   ]
 }

@@ -18,7 +18,7 @@
 | Local persistence | Uses SQLite WAL for state and JSONL plus JSON evidence files for auditability. | Keeps user data outside the immutable ISO image. |
 | Human-approved agent console | Adds contextual local chat, visible activity, command proposal cards, task history, takeover, endpoint snapshots, local memory, and chat-added skill drafts. | Commands remain inert until the operator approves a typed catalog action; chat-added skills are data records, not executable code. |
 
-## Deliberately unavailable in version 0.2.0
+## Deliberately unavailable in version 0.2.1
 
 The following are **not implemented** and must not be inferred from this repository or user interface: ADB/Fastboot support, firmware selection, firmware flashing, recovery writes, credential capture, authentication bypasses, payload delivery, exploitation, remote shells, lateral movement, covert persistence, packet capture, arbitrary tool execution, Windows/macOS release validation, and physical Ventoy USB validation.
 
@@ -93,7 +93,7 @@ Ventoy persistence uses a configuration in `/ventoy/ventoy.json` that maps an IS
 
 | Ventoy first-partition path | Contents |
 |---|---|
-| `/iso/network-ninja-master-0.2.0-linux-amd64.iso` | The ISO produced by `make iso`. |
+| `/iso/network-ninja-master-0.2.1-linux-amd64.iso` | The ISO produced by `make iso`. |
 | `/ventoy/ventoy.json` | Copy `build/ventoy/ventoy.json` after confirming its ISO path matches the filename used. |
 | `/persistence/network-ninja-master-persistence.dat` | Ext4 persistence image created by `scripts/create-persistence.sh`. |
 | `/data/` | Optional external working directory for logs, SQLite state, and evidence. |
@@ -114,7 +114,7 @@ Run the following after a successful build:
 
 ```bash
 make package
-cd dist/release/network-ninja-master-0.2.0
+cd dist/release/network-ninja-master-0.2.1
 sha256sum -c SHA256SUMS
 ```
 

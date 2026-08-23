@@ -1,0 +1,14 @@
+xorriso 1.5.6 : RockRidge filesystem manipulator, libburnia project.
+
+Copying of file objects from ISO image to disk filesystem is: Enabled
+xorriso : NOTE : Loading ISO image tree from LBA 0
+xorriso : UPDATE :      17 nodes read in 1 seconds
+xorriso : NOTE : Detected El-Torito boot information which currently is set to be discarded
+Drive current: -indev 'dist/network-ninja-master-0.2.1-linux-amd64.iso'
+Media current: stdio file, overwriteable
+Media status : is written , is appendable
+Boot record  : El Torito
+Media summary: 1 session, 158856 data blocks,  310m data, 23.9g free
+Volume id    : 'NETWORK_NINJA_0.2.1'
+xorriso : UPDATE :       1 files restored ( 267.8m) in 1 seconds = 202.7xD
+Extracted from ISO image: file '/live/filesystem.squashfs'='/tmp/tmp.3fv5znc7qB/filesystem.squashfs'

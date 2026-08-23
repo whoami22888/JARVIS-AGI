@@ -24,7 +24,7 @@ import (
 	"github.com/whoami22888/JARVIS-AGI/network-ninja-master/internal/store"
 )
 
-var version = "0.2.0-dev"
+var version = "0.2.1-dev"
 
 //go:embed web/index.html
 var dashboardHTML []byte

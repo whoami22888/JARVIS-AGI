@@ -1,0 +1,17 @@
+xorriso 1.5.6 : RockRidge filesystem manipulator, libburnia project.
+
+xorriso : NOTE : Loading ISO image tree from LBA 0
+xorriso : UPDATE :      17 nodes read in 1 seconds
+xorriso : NOTE : Detected El-Torito boot information which currently is set to be discarded
+Drive current: -indev 'dist/network-ninja-master-0.2.1-linux-amd64.iso'
+Media current: stdio file, overwriteable
+Media status : is written , is appendable
+Boot record  : El Torito
+Media summary: 1 session, 158856 data blocks,  310m data, 23.9g free
+Volume id    : 'NETWORK_NINJA_0.2.1'
+'filesystem.packages'
+'filesystem.packages-remove'
+'filesystem.squashfs'
+'initrd.img-6.1.0-52-amd64'
+'memtest'
+'vmlinuz-6.1.0-52-amd64'

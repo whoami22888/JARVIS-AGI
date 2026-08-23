@@ -11,13 +11,13 @@ cat > "${OUTPUT}" <<EOF
 {
   "bomFormat": "CycloneDX",
   "specVersion": "1.5",
-  "serialNumber": "urn:uuid:network-ninja-master-${VERSION:-0.2.0}",
+  "serialNumber": "urn:uuid:network-ninja-master-${VERSION:-0.2.1}",
   "version": 1,
   "metadata": {
     "component": {
       "type": "application",
       "name": "Network Ninja Master",
-      "version": "${VERSION:-0.2.0}",
+      "version": "${VERSION:-0.2.1}",
       "description": "Authorized, scope-enforced portable diagnostics runtime"
     }
   },

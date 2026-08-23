@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-VERSION="${VERSION:-0.2.0}"
+VERSION="${VERSION:-0.2.1}"
 STAGE="${ROOT}/dist/release/network-ninja-master-${VERSION}"
 BINARY="${ROOT}/dist/linux-amd64/network-ninja"
 
