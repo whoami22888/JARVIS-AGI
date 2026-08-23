@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/whoami22888/JARVIS-AGI/network-ninja-master/internal/agent"
 	"github.com/whoami22888/JARVIS-AGI/network-ninja-master/internal/audit"
 	"github.com/whoami22888/JARVIS-AGI/network-ninja-master/internal/device"
 	"github.com/whoami22888/JARVIS-AGI/network-ninja-master/internal/scan"
@@ -21,7 +22,7 @@ import (
 	"github.com/whoami22888/JARVIS-AGI/network-ninja-master/internal/store"
 )
 
-var version = "0.1.0-dev"
+var version = "0.2.0-dev"
 
 //go:embed web/index.html
 var dashboardHTML []byte
@@ -30,6 +31,7 @@ type runtimeEnv struct {
 	root  string
 	audit *audit.Store
 	state *store.Store
+	agent *agent.Service
 }
 
 type operationResult struct {
@@ -235,7 +237,7 @@ func openRuntime(requestedRoot string) (*runtimeEnv, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &runtimeEnv{root: root, audit: auditStore, state: state}, nil
+	return &runtimeEnv{root: root, audit: auditStore, state: state, agent: agent.New(state)}, nil
 }
 
 func resolveDataRoot(requested string) (string, error) {
@@ -329,6 +331,19 @@ func (r *runtimeEnv) routes() http.Handler {
 	mux.HandleFunc("/api/devices", r.devicesAPI)
 	mux.HandleFunc("/api/jobs", r.jobsAPI)
 	mux.HandleFunc("/api/scan/", r.scanAPI)
+	mux.HandleFunc("/api/agent/status", r.agentStatusAPI)
+	mux.HandleFunc("/api/agent/context", r.agentContextAPI)
+	mux.HandleFunc("/api/agent/chat", r.agentChatAPI)
+	mux.HandleFunc("/api/agent/messages", r.agentMessagesAPI)
+	mux.HandleFunc("/api/agent/memories", r.agentMemoriesAPI)
+	mux.HandleFunc("/api/agent/activity", r.agentActivityAPI)
+	mux.HandleFunc("/api/agent/commands", r.agentCommandsAPI)
+	mux.HandleFunc("/api/agent/commands/", r.agentCommandAPI)
+	mux.HandleFunc("/api/agent/tasks", r.agentTasksAPI)
+	mux.HandleFunc("/api/agent/tasks/", r.agentTaskAPI)
+	mux.HandleFunc("/api/agent/takeover", r.agentTakeoverAPI)
+	mux.HandleFunc("/api/agent/skills", r.agentSkillsAPI)
+	mux.HandleFunc("/api/agent/skills/", r.agentSkillAPI)
 	return securityHeaders(mux)
 }
 
@@ -437,6 +452,222 @@ func (r *runtimeEnv) scanAPI(w http.ResponseWriter, request *http.Request) {
 		code = http.StatusBadGateway
 	}
 	writeJSON(w, code, result)
+}
+
+type agentChatRequest struct {
+	Message string `json:"message"`
+}
+
+func (r *runtimeEnv) agentStatusAPI(w http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	contextSummary, err := r.agent.Context()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ready", "takeover_mode": r.agent.InTakeover(), "context": contextSummary, "capabilities": []string{"contextual_chat", "visible_activity", "approval_gated_local_actions", "local_memory", "skill_drafts", "endpoint_snapshot"}})
+}
+
+func (r *runtimeEnv) agentContextAPI(w http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	contextSummary, err := r.agent.Context()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, contextSummary)
+}
+
+func (r *runtimeEnv) agentChatAPI(w http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	var input agentChatRequest
+	if err := decodeJSON(w, request, &input); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	context, cancel := context.WithTimeout(request.Context(), 15*time.Second)
+	defer cancel()
+	response, err := r.agent.Chat(context, input.Message)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
+func (r *runtimeEnv) agentMessagesAPI(w http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	items, err := r.agent.Messages()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"messages": items})
+}
+
+func (r *runtimeEnv) agentMemoriesAPI(w http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	items, err := r.agent.Memories()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"memories": items})
+}
+
+func (r *runtimeEnv) agentActivityAPI(w http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	items, err := r.agent.Activities()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"activity": items})
+}
+
+func (r *runtimeEnv) agentCommandsAPI(w http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"commands": agent.Catalog()})
+}
+
+func (r *runtimeEnv) agentCommandAPI(w http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	parts := strings.Split(strings.TrimPrefix(request.URL.Path, "/api/agent/commands/"), "/")
+	if len(parts) != 2 || parts[0] == "" || parts[1] != "propose" {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "unknown agent command route"})
+		return
+	}
+	task, err := r.agent.Propose(parts[0])
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, task)
+}
+
+func (r *runtimeEnv) agentTasksAPI(w http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	items, err := r.agent.Tasks()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"tasks": items})
+}
+
+func (r *runtimeEnv) agentTaskAPI(w http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	parts := strings.Split(strings.TrimPrefix(request.URL.Path, "/api/agent/tasks/"), "/")
+	if len(parts) != 2 || parts[0] == "" {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "unknown agent task route"})
+		return
+	}
+	var task store.AgentTask
+	var err error
+	switch parts[1] {
+	case "approve":
+		task, err = r.agent.ApproveAndRun(parts[0])
+	case "cancel":
+		task, err = r.agent.Cancel(parts[0])
+	default:
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "unknown task action"})
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, task)
+}
+
+func (r *runtimeEnv) agentTakeoverAPI(w http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	action := strings.TrimSpace(request.URL.Query().Get("action"))
+	var err error
+	switch action {
+	case "start":
+		err = r.agent.StartTakeover()
+	case "end":
+		err = r.agent.EndTakeover()
+	default:
+		writeError(w, http.StatusBadRequest, errors.New("takeover action must be start or end"))
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"takeover_mode": r.agent.InTakeover()})
+}
+
+func (r *runtimeEnv) agentSkillsAPI(w http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	items, err := r.agent.Skills()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"skills": items})
+}
+
+func (r *runtimeEnv) agentSkillAPI(w http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	parts := strings.Split(strings.TrimPrefix(request.URL.Path, "/api/agent/skills/"), "/")
+	if len(parts) != 2 || parts[0] == "" || parts[1] != "approve" {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "unknown skill action"})
+		return
+	}
+	item, err := r.agent.ApproveSkill(parts[0])
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
+func decodeJSON(w http.ResponseWriter, request *http.Request, destination any) error {
+	decoder := json.NewDecoder(http.MaxBytesReader(w, request.Body, 64<<10))
+	decoder.DisallowUnknownFields()
+	return decoder.Decode(destination)
 }
 
 func securityHeaders(next http.Handler) http.Handler {

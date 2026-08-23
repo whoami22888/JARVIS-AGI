@@ -1,5 +1,5 @@
 SHELL := /usr/bin/env bash
-VERSION ?= 0.1.0
+VERSION ?= 0.2.0
 
 .PHONY: fmt test vet build iso package clean
 

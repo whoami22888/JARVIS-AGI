@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-VERSION="${VERSION:-0.1.0}"
+VERSION="${VERSION:-0.2.0}"
 STAGE="${ROOT}/dist/release/network-ninja-master-${VERSION}"
 BINARY="${ROOT}/dist/linux-amd64/network-ninja"
 
@@ -33,7 +33,7 @@ cat > "${STAGE}/release-manifest.json" <<EOF
   "architecture": ["linux-amd64"],
   "supported_boot_deployment": "Ventoy (physical validation required)",
   "data_persistence": "Ventoy persistence backend configured in ventoy/ventoy.json",
-  "verified_capabilities": ["scope validation", "local host inventory", "local device inventory", "bounded TCP diagnostics", "bounded TLS metadata diagnostics", "bounded HTTP metadata diagnostics", "append-only audit", "SQLite state"],
+  "verified_capabilities": ["scope validation", "local host inventory", "local device inventory", "bounded TCP diagnostics", "bounded TLS metadata diagnostics", "bounded HTTP metadata diagnostics", "append-only audit", "SQLite state", "contextual local chat", "visible activity history", "approval-gated local command catalog", "operator takeover", "local memory", "inert chat-added skill drafts", "manual endpoint snapshots"],
   "blocked_capabilities": ["physical Ventoy boot validation", "UEFI boot validation", "physical USB device testing", "ADB/Fastboot", "firmware operations", "Windows/macOS native validation", "vendor driver workflows"],
   "integrity": "See SHA256SUMS"
 }

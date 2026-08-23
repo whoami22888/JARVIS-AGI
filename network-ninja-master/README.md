@@ -16,8 +16,9 @@
 | HTTP diagnostic | Performs a scoped `HEAD` request with no redirect following and records status plus headers, not document bodies. | Stores an evidence snapshot and append-only audit event. |
 | Local dashboard | Serves host, device, job, and guarded-diagnostic data on loopback only. | API and CLI use the same authorization and execution path. |
 | Local persistence | Uses SQLite WAL for state and JSONL plus JSON evidence files for auditability. | Keeps user data outside the immutable ISO image. |
+| Human-approved agent console | Adds contextual local chat, visible activity, command proposal cards, task history, takeover, endpoint snapshots, local memory, and chat-added skill drafts. | Commands remain inert until the operator approves a typed catalog action; chat-added skills are data records, not executable code. |
 
-## Deliberately unavailable in version 0.1.0
+## Deliberately unavailable in version 0.2.0
 
 The following are **not implemented** and must not be inferred from this repository or user interface: ADB/Fastboot support, firmware selection, firmware flashing, recovery writes, credential capture, authentication bypasses, payload delivery, exploitation, remote shells, lateral movement, covert persistence, packet capture, arbitrary tool execution, Windows/macOS release validation, and physical Ventoy USB validation.
 
@@ -32,7 +33,7 @@ cd network-ninja-master
 make fmt test build
 ```
 
-The Linux x86_64 binary appears at `dist/linux-amd64/network-ninja`. Build a candidate hybrid live ISO with:
+The Linux x86_64 binary appears at `dist/linux-amd64/network-ninja`. Build a candidate standard GRUB live ISO for Ventoy selection with:
 
 ```bash
 make iso
@@ -80,13 +81,19 @@ Start the local dashboard:
 
 Open `http://127.0.0.1:8000` on the **same host**. The executable rejects a non-loopback listener address. The dashboard contains only backed controls: its diagnostic form invokes the same scope engine and operation pipeline as the CLI.
 
+## Human-approved agent console
+
+The local dashboard now opens the original **Network Ninja Console**. It keeps chat, activity, command proposals, approvals, task results, takeover status, durable local notes, and skill drafts in the configured local data root. The console has no remote administration mode.
+
+Type a normal request to receive a contextual local response. Requests such as “inspect this computer,” “USB inventory,” or “capture a snapshot” create a visible typed action card. The operator must press **Approve and run** before the local collector executes. **Take control** pauses pending actions; ending takeover requires a new proposal. Use `skill:` or `upgrade:` in chat to add an inert local knowledge draft. Review `docs/AGENT_CONSOLE_ARCHITECTURE.md` for exact states and boundaries.
+
 ## Ventoy deployment
 
 Ventoy persistence uses a configuration in `/ventoy/ventoy.json` that maps an ISO file to a separately stored backend image.[1] A supported deployment is:
 
 | Ventoy first-partition path | Contents |
 |---|---|
-| `/iso/network-ninja-master-0.1.0-linux-amd64.iso` | The ISO produced by `make iso`. |
+| `/iso/network-ninja-master-0.2.0-linux-amd64.iso` | The ISO produced by `make iso`. |
 | `/ventoy/ventoy.json` | Copy `build/ventoy/ventoy.json` after confirming its ISO path matches the filename used. |
 | `/persistence/network-ninja-master-persistence.dat` | Ext4 persistence image created by `scripts/create-persistence.sh`. |
 | `/data/` | Optional external working directory for logs, SQLite state, and evidence. |
@@ -107,7 +114,7 @@ Run the following after a successful build:
 
 ```bash
 make package
-cd dist/release/network-ninja-master-0.1.0
+cd dist/release/network-ninja-master-0.2.0
 sha256sum -c SHA256SUMS
 ```
 
@@ -115,7 +122,7 @@ The package contains the Linux binary, checksums, Ventoy template, persistence-i
 
 ## Security properties
 
-The runtime does not interpolate target values into a shell command, follows no HTTP redirects, does not collect HTTP bodies, accepts no arbitrary executable upload, does not expose an administration endpoint to the network, and writes scope/audit decisions to disk. Review `docs/SAFETY_AND_FEASIBILITY.md`, `docs/ARCHITECTURE.md`, and `docs/TRACEABILITY_MATRIX.md` before deployment.
+The runtime does not interpolate target values into a shell command, follows no HTTP redirects, does not collect HTTP bodies, accepts no arbitrary executable upload, does not expose an administration endpoint to the network, and writes scope/audit decisions to disk. The agent console adds only a typed, local command catalog; it does not convert chat text or skill drafts into arbitrary executable commands. Review `docs/SAFETY_AND_FEASIBILITY.md`, `docs/ARCHITECTURE.md`, and `docs/TRACEABILITY_MATRIX.md` before deployment.
 
 ## References
 

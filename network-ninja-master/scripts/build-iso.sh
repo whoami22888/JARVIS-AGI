@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-VERSION="${VERSION:-0.1.0}"
+VERSION="${VERSION:-0.2.0}"
 # Dot-prefixed work directories are ignored by Go package discovery, preventing
 # privileged live-build artifacts from interfering with `go test ./...`.
 WORK="${WORK_DIR:-${ROOT}/build/live/.work}"
@@ -22,6 +22,7 @@ install -D -m 0755 "${BINARY}" "${WORK}/config/includes.chroot/usr/local/bin/net
 install -D -m 0644 "${ROOT}/README.md" "${WORK}/config/includes.chroot/usr/share/doc/network-ninja/README.md"
 install -D -m 0644 "${ROOT}/docs/ARCHITECTURE.md" "${WORK}/config/includes.chroot/usr/share/doc/network-ninja/ARCHITECTURE.md"
 install -D -m 0644 "${ROOT}/docs/SAFETY_AND_FEASIBILITY.md" "${WORK}/config/includes.chroot/usr/share/doc/network-ninja/SAFETY_AND_FEASIBILITY.md"
+install -D -m 0644 "${ROOT}/docs/AGENT_CONSOLE_ARCHITECTURE.md" "${WORK}/config/includes.chroot/usr/share/doc/network-ninja/AGENT_CONSOLE_ARCHITECTURE.md"
 ln -sf /etc/systemd/system/network-ninja.service "${WORK}/config/includes.chroot/etc/systemd/system/multi-user.target.wants/network-ninja.service"
 
 pushd "${WORK}" >/dev/null

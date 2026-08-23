@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT="${OUT_DIR:-${ROOT}/dist/linux-amd64}"
-VERSION="${VERSION:-0.1.0}"
+VERSION="${VERSION:-0.2.0}"
 
 command -v go >/dev/null || { echo "Go is required." >&2; exit 1; }
 mkdir -p "${OUT}"
