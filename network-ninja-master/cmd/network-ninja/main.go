@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	_ "embed"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -28,10 +30,11 @@ var version = "0.2.0-dev"
 var dashboardHTML []byte
 
 type runtimeEnv struct {
-	root  string
-	audit *audit.Store
-	state *store.Store
-	agent *agent.Service
+	root       string
+	audit      *audit.Store
+	state      *store.Store
+	agent      *agent.Service
+	writeToken string
 }
 
 type operationResult struct {
@@ -122,7 +125,9 @@ func scopeCommand(args []string) {
 	}
 	flags := flag.NewFlagSet("scope validate", flag.ExitOnError)
 	file := flags.String("file", "", "scope JSON path")
-	flags.Parse(args[1:])
+	if err := flags.Parse(args[1:]); err != nil {
+		fatal(err)
+	}
 	if *file == "" {
 		fatal(errors.New("--file is required"))
 	}
@@ -145,7 +150,9 @@ func scanCommand(args []string) {
 	port := flags.Int("port", 0, "target port")
 	rawURL := flags.String("url", "", "http(s) URL")
 	dataRoot := flags.String("data-root", "", "persistent data root")
-	flags.Parse(args[1:])
+	if err := flags.Parse(args[1:]); err != nil {
+		fatal(err)
+	}
 	if *scopePath == "" {
 		fatal(errors.New("--scope is required"))
 	}
@@ -199,7 +206,9 @@ func serveCommand(args []string) {
 	flags := flag.NewFlagSet("serve", flag.ExitOnError)
 	address := flags.String("addr", "127.0.0.1:8000", "loopback HTTP address")
 	dataRoot := flags.String("data-root", "", "persistent data root")
-	flags.Parse(args)
+	if err := flags.Parse(args); err != nil {
+		fatal(err)
+	}
 	host, _, err := net.SplitHostPort(*address)
 	if err != nil || !isLoopbackHost(host) {
 		fatal(errors.New("dashboard may bind only to loopback (for example 127.0.0.1:8000)"))
@@ -237,7 +246,20 @@ func openRuntime(requestedRoot string) (*runtimeEnv, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &runtimeEnv{root: root, audit: auditStore, state: state, agent: agent.New(state)}, nil
+	writeToken, err := newWriteToken()
+	if err != nil {
+		_ = state.Close()
+		return nil, err
+	}
+	return &runtimeEnv{root: root, audit: auditStore, state: state, agent: agent.New(state), writeToken: writeToken}, nil
+}
+
+func newWriteToken() (string, error) {
+	bytes := make([]byte, 32)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", fmt.Errorf("generate local write token: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(bytes), nil
 }
 
 func resolveDataRoot(requested string) (string, error) {
@@ -344,7 +366,7 @@ func (r *runtimeEnv) routes() http.Handler {
 	mux.HandleFunc("/api/agent/takeover", r.agentTakeoverAPI)
 	mux.HandleFunc("/api/agent/skills", r.agentSkillsAPI)
 	mux.HandleFunc("/api/agent/skills/", r.agentSkillAPI)
-	return securityHeaders(mux)
+	return securityHeaders(r.requireWriteToken(mux))
 }
 
 func (r *runtimeEnv) healthAPI(w http.ResponseWriter, request *http.Request) {
@@ -468,7 +490,7 @@ func (r *runtimeEnv) agentStatusAPI(w http.ResponseWriter, request *http.Request
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"status": "ready", "takeover_mode": r.agent.InTakeover(), "context": contextSummary, "capabilities": []string{"contextual_chat", "visible_activity", "approval_gated_local_actions", "local_memory", "skill_drafts", "endpoint_snapshot"}})
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ready", "takeover_mode": r.agent.InTakeover(), "context": contextSummary, "write_token": r.writeToken, "capabilities": []string{"contextual_chat", "visible_activity", "approval_gated_local_actions", "local_memory", "skill_drafts", "endpoint_snapshot"}})
 }
 
 func (r *runtimeEnv) agentContextAPI(w http.ResponseWriter, request *http.Request) {
@@ -668,6 +690,16 @@ func decodeJSON(w http.ResponseWriter, request *http.Request, destination any) e
 	decoder := json.NewDecoder(http.MaxBytesReader(w, request.Body, 64<<10))
 	decoder.DisallowUnknownFields()
 	return decoder.Decode(destination)
+}
+
+func (r *runtimeEnv) requireWriteToken(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if request.Method == http.MethodPost && request.Header.Get("X-Network-Ninja-Write-Token") != r.writeToken {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "missing or invalid local write token"})
+			return
+		}
+		next.ServeHTTP(w, request)
+	})
 }
 
 func securityHeaders(next http.Handler) http.Handler {

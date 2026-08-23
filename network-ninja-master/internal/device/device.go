@@ -80,8 +80,10 @@ func memoryTotalKB() uint64 {
 		fields := strings.Fields(scanner.Text())
 		if len(fields) >= 2 && fields[0] == "MemTotal:" {
 			var value uint64
-			fmt.Sscan(fields[1], &value)
-			return value
+			if _, err := fmt.Sscan(fields[1], &value); err == nil {
+				return value
+			}
+			return 0
 		}
 	}
 	return 0
@@ -142,6 +144,7 @@ func serialInventory() ([]Device, error) {
 }
 
 func readTrimmed(path string) string {
+	// #nosec G304 -- callers construct attribute paths below the local sysfs USB inventory root.
 	bytes, err := os.ReadFile(path)
 	if err != nil {
 		return ""

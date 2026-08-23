@@ -1,0 +1,8 @@
+ok  	github.com/whoami22888/JARVIS-AGI/network-ninja-master/cmd/network-ninja	0.012s
+?   	github.com/whoami22888/JARVIS-AGI/network-ninja-master/internal/audit	[no test files]
+?   	github.com/whoami22888/JARVIS-AGI/network-ninja-master/internal/device	[no test files]
+ok  	github.com/whoami22888/JARVIS-AGI/network-ninja-master/internal/agent	0.074s
+ok  	github.com/whoami22888/JARVIS-AGI/network-ninja-master/internal/scan	(cached)
+ok  	github.com/whoami22888/JARVIS-AGI/network-ninja-master/internal/scope	0.002s
+?   	github.com/whoami22888/JARVIS-AGI/network-ninja-master/tests/http-lab	[no test files]
+ok  	github.com/whoami22888/JARVIS-AGI/network-ninja-master/internal/store	1.021s

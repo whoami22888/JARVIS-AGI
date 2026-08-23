@@ -2,7 +2,11 @@ package agent
 
 import (
 	"context"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/whoami22888/JARVIS-AGI/network-ninja-master/internal/store"
@@ -112,5 +116,122 @@ func TestMonitorSnapshotCreatesTimelineEvent(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("monitor activity not found: %#v", activity)
+	}
+}
+
+func TestReasonerEgressIsConstrained(t *testing.T) {
+	service := openTestService(t)
+	if _, err := service.state.AddMessage("user", "prior secret=do-not-send"); err != nil {
+		t.Fatalf("seed message: %v", err)
+	}
+	service.endpoint = "http://example.invalid/v1/chat/completions"
+	if _, ok := service.optionalReasoner(context.Background(), "current request"); ok {
+		t.Fatal("non-loopback HTTP endpoint was accepted")
+	}
+
+	var received string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		body, _ := io.ReadAll(request.Body)
+		received = string(body)
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"Concise remote response"}}]}`))
+	}))
+	defer server.Close()
+	service.endpoint = server.URL
+	response, ok := service.optionalReasoner(context.Background(), "current request")
+	if !ok || response != "Concise remote response" {
+		t.Fatalf("expected bounded loopback reasoner response, got %q ok=%v", response, ok)
+	}
+	if strings.Contains(received, "do-not-send") {
+		t.Fatalf("prior context leaked without opt-in: %s", received)
+	}
+
+	oversized := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"` + strings.Repeat("x", maxRemoteReplyBytes+1) + `"}}]}`))
+	}))
+	defer oversized.Close()
+	service.endpoint = oversized.URL
+	if _, ok := service.optionalReasoner(context.Background(), "current request"); ok {
+		t.Fatal("oversized remote reasoner response was accepted")
+	}
+
+	redirect := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		http.Redirect(w, request, "/other", http.StatusFound)
+	}))
+	defer redirect.Close()
+	service.endpoint = redirect.URL
+	if _, ok := service.optionalReasoner(context.Background(), "current request"); ok {
+		t.Fatal("redirecting reasoner endpoint was accepted")
+	}
+}
+
+func TestConcurrentProposalsHaveUniqueIDs(t *testing.T) {
+	service := openTestService(t)
+	const workers = 32
+	ids := make(chan string, workers)
+	errs := make(chan error, workers)
+	var group sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			task, err := service.Propose("host_inventory")
+			if err != nil {
+				errs <- err
+				return
+			}
+			ids <- task.ID
+		}()
+	}
+	group.Wait()
+	close(ids)
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("parallel proposal failed: %v", err)
+		}
+	}
+	seen := map[string]bool{}
+	for id := range ids {
+		if seen[id] {
+			t.Fatalf("duplicate task id %q", id)
+		}
+		seen[id] = true
+	}
+	if len(seen) != workers {
+		t.Fatalf("expected %d task ids, got %d", workers, len(seen))
+	}
+}
+
+func TestConcurrentApprovalHasOneWinner(t *testing.T) {
+	service := openTestService(t)
+	task, err := service.Propose("host_inventory")
+	if err != nil {
+		t.Fatalf("propose: %v", err)
+	}
+	const workers = 12
+	results := make(chan error, workers)
+	var group sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			_, err := service.ApproveAndRun(task.ID)
+			results <- err
+		}()
+	}
+	group.Wait()
+	close(results)
+	success := 0
+	for err := range results {
+		if err == nil {
+			success++
+		}
+	}
+	if success != 1 {
+		t.Fatalf("expected one approval winner, got %d", success)
+	}
+	stored, err := service.state.TaskByID(task.ID)
+	if err != nil || stored.Status != StatusComplete {
+		t.Fatalf("final task state: %#v err=%v", stored, err)
 	}
 }

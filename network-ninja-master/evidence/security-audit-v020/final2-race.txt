@@ -1,0 +1,8 @@
+?   	github.com/whoami22888/JARVIS-AGI/network-ninja-master/internal/audit	[no test files]
+?   	github.com/whoami22888/JARVIS-AGI/network-ninja-master/internal/device	[no test files]
+?   	github.com/whoami22888/JARVIS-AGI/network-ninja-master/tests/http-lab	[no test files]
+ok  	github.com/whoami22888/JARVIS-AGI/network-ninja-master/cmd/network-ninja	1.066s
+ok  	github.com/whoami22888/JARVIS-AGI/network-ninja-master/internal/agent	1.457s
+ok  	github.com/whoami22888/JARVIS-AGI/network-ninja-master/internal/scan	3.841s
+ok  	github.com/whoami22888/JARVIS-AGI/network-ninja-master/internal/scope	1.014s
+ok  	github.com/whoami22888/JARVIS-AGI/network-ninja-master/internal/store	6.526s

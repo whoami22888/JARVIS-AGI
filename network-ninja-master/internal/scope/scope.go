@@ -51,6 +51,7 @@ type Decision struct {
 }
 
 func Load(path string) (Scope, error) {
+	// #nosec G304 -- path is supplied explicitly by the local CLI operator and parsed as a validated scope document.
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return Scope{}, fmt.Errorf("read scope: %w", err)

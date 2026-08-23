@@ -4,6 +4,7 @@ import (
 	"flag"
 	"log"
 	"net/http"
+	"time"
 )
 
 func main() {
@@ -14,5 +15,6 @@ func main() {
 		w.Header().Set("Content-Length", "0")
 		w.WriteHeader(http.StatusNoContent)
 	})
-	log.Fatal(http.ListenAndServe(*address, handler))
+	server := &http.Server{Addr: *address, Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 10 * time.Second, IdleTimeout: 30 * time.Second}
+	log.Fatal(server.ListenAndServe())
 }

@@ -1,0 +1,23 @@
+File: store.test
+Build ID: fcd0f9ed4fe86f5f6d26d91d15eb76f9d8af00a7
+Type: alloc_space
+Time: Aug 23, 2026 at 9:35am (UTC)
+Showing nodes accounting for 1024.05kB, 100% of 1024.05kB total
+      flat  flat%   sum%        cum   cum%
+  512.02kB 50.00% 50.00%   512.02kB 50.00%  database/sql.driverArgsConnLocked
+  512.02kB 50.00%   100%   512.02kB 50.00%  github.com/mattn/go-sqlite3.(*SQLiteConn).prepare
+         0     0%   100%  1024.05kB   100%  database/sql.(*DB).Exec (inline)
+         0     0%   100%  1024.05kB   100%  database/sql.(*DB).ExecContext
+         0     0%   100%  1024.05kB   100%  database/sql.(*DB).ExecContext.func1
+         0     0%   100%  1024.05kB   100%  database/sql.(*DB).exec
+         0     0%   100%  1024.05kB   100%  database/sql.(*DB).execDC
+         0     0%   100%  1024.05kB   100%  database/sql.(*DB).execDC.func2
+         0     0%   100%  1024.05kB   100%  database/sql.(*DB).retry
+         0     0%   100%   512.02kB 50.00%  database/sql.ctxDriverExec
+         0     0%   100%  1024.05kB   100%  database/sql.withLock
+         0     0%   100%   512.02kB 50.00%  github.com/mattn/go-sqlite3.(*SQLiteConn).ExecContext
+         0     0%   100%   512.02kB 50.00%  github.com/mattn/go-sqlite3.(*SQLiteConn).exec
+         0     0%   100%  1024.05kB   100%  github.com/whoami22888/JARVIS-AGI/network-ninja-master/internal/store.(*Store).AddMessage
+         0     0%   100%  1024.05kB   100%  github.com/whoami22888/JARVIS-AGI/network-ninja-master/internal/store.TestMessageRetentionAndBounds
+         0     0%   100%  1024.05kB   100%  github.com/whoami22888/JARVIS-AGI/network-ninja-master/internal/store.prune
+         0     0%   100%  1024.05kB   100%  testing.tRunner

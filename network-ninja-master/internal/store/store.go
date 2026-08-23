@@ -8,9 +8,20 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
+)
+
+const (
+	maxMessageBytes  = 12 << 10
+	maxSkillBytes    = 32 << 10
+	maxActivityBytes = 64 << 10
+	keepMessages     = 2000
+	keepActivities   = 5000
+	keepTasks        = 5000
+	keepSkills       = 500
 )
 
 type Store struct{ db *sql.DB }
@@ -99,7 +110,9 @@ func Open(root string) (*Store, error) {
 	}
 	db.SetMaxOpenConns(1)
 	if _, err := db.Exec(`PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON;`); err != nil {
-		db.Close()
+		if closeErr := db.Close(); closeErr != nil {
+			return nil, fmt.Errorf("configure state database: %w; close database: %v", err, closeErr)
+		}
 		return nil, fmt.Errorf("configure state database: %w", err)
 	}
 	if _, err := db.Exec(`
@@ -179,14 +192,46 @@ CREATE TABLE IF NOT EXISTS skills (
  updated_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_skills_updated_at ON skills(updated_at DESC);
-`); err != nil {
-		db.Close()
+	`); err != nil {
+		if closeErr := db.Close(); closeErr != nil {
+			return nil, fmt.Errorf("initialize state schema: %w; close database: %v", err, closeErr)
+		}
 		return nil, fmt.Errorf("initialize state schema: %w", err)
 	}
 	return &Store{db: db}, nil
 }
 
 func (s *Store) Close() error { return s.db.Close() }
+
+func bounded(label, value string, limit int) error {
+	if strings.TrimSpace(value) == "" {
+		return fmt.Errorf("%s is required", label)
+	}
+	if len(value) > limit {
+		return fmt.Errorf("%s exceeds %d bytes", label, limit)
+	}
+	return nil
+}
+
+func (s *Store) pruneMessages() error {
+	_, err := s.db.Exec(`DELETE FROM conversation_messages WHERE id NOT IN (SELECT id FROM conversation_messages ORDER BY id DESC LIMIT ?)`, keepMessages)
+	return err
+}
+
+func (s *Store) pruneActivities() error {
+	_, err := s.db.Exec(`DELETE FROM activities WHERE id NOT IN (SELECT id FROM activities ORDER BY created_at DESC, id DESC LIMIT ?)`, keepActivities)
+	return err
+}
+
+func (s *Store) pruneTasks() error {
+	_, err := s.db.Exec(`DELETE FROM agent_tasks WHERE id NOT IN (SELECT id FROM agent_tasks ORDER BY requested_at DESC, id DESC LIMIT ?)`, keepTasks)
+	return err
+}
+
+func (s *Store) pruneSkills() error {
+	_, err := s.db.Exec(`DELETE FROM skills WHERE id NOT IN (SELECT id FROM skills ORDER BY updated_at DESC, id DESC LIMIT ?)`, keepSkills)
+	return err
+}
 
 func (s *Store) Start(job Job) error {
 	if job.ID == "" || job.EngagementID == "" || job.Operation == "" || job.Status == "" {
@@ -244,8 +289,11 @@ func (s *Store) RecentJobs(limit int) ([]Job, error) {
 }
 
 func (s *Store) AddMessage(role, content string) (ConversationMessage, error) {
-	if role == "" || content == "" {
-		return ConversationMessage{}, fmt.Errorf("message role and content are required")
+	if role != "user" && role != "assistant" {
+		return ConversationMessage{}, fmt.Errorf("message role must be user or assistant")
+	}
+	if err := bounded("message content", content, maxMessageBytes); err != nil {
+		return ConversationMessage{}, err
 	}
 	now := time.Now().UTC()
 	result, err := s.db.Exec(`INSERT INTO conversation_messages(role, content, created_at) VALUES (?, ?, ?)`, role, content, now.Format(time.RFC3339Nano))
@@ -253,6 +301,9 @@ func (s *Store) AddMessage(role, content string) (ConversationMessage, error) {
 		return ConversationMessage{}, err
 	}
 	id, _ := result.LastInsertId()
+	if err := s.pruneMessages(); err != nil {
+		return ConversationMessage{}, fmt.Errorf("prune conversation messages: %w", err)
+	}
 	return ConversationMessage{ID: id, Role: role, Content: content, CreatedAt: now}, nil
 }
 
@@ -326,8 +377,14 @@ func (s *Store) RecentMemories(limit int) ([]Memory, error) {
 }
 
 func (s *Store) RecordActivity(activity Activity) (Activity, error) {
-	if activity.ID == "" || activity.Kind == "" || activity.Summary == "" {
-		return Activity{}, fmt.Errorf("activity id, kind, and summary are required")
+	if err := bounded("activity id", activity.ID, 256); err != nil {
+		return Activity{}, err
+	}
+	if err := bounded("activity kind", activity.Kind, 128); err != nil {
+		return Activity{}, err
+	}
+	if err := bounded("activity summary", activity.Summary, 4096); err != nil {
+		return Activity{}, err
 	}
 	if activity.CreatedAt.IsZero() {
 		activity.CreatedAt = time.Now().UTC()
@@ -335,8 +392,17 @@ func (s *Store) RecordActivity(activity Activity) (Activity, error) {
 	if activity.Detail == nil {
 		activity.Detail = json.RawMessage(`{}`)
 	}
+	if len(activity.Detail) > maxActivityBytes || !json.Valid(activity.Detail) {
+		return Activity{}, fmt.Errorf("activity detail must be valid JSON up to %d bytes", maxActivityBytes)
+	}
 	_, err := s.db.Exec(`INSERT INTO activities(id, kind, summary, detail, created_at) VALUES (?, ?, ?, ?, ?)`, activity.ID, activity.Kind, activity.Summary, string(activity.Detail), activity.CreatedAt.UTC().Format(time.RFC3339Nano))
-	return activity, err
+	if err != nil {
+		return Activity{}, err
+	}
+	if err := s.pruneActivities(); err != nil {
+		return Activity{}, fmt.Errorf("prune activities: %w", err)
+	}
+	return activity, nil
 }
 
 func (s *Store) RecentActivities(limit int) ([]Activity, error) {
@@ -366,8 +432,17 @@ func (s *Store) RecentActivities(limit int) ([]Activity, error) {
 }
 
 func (s *Store) CreateTask(task AgentTask) (AgentTask, error) {
-	if task.ID == "" || task.Kind == "" || task.Title == "" || task.Status == "" {
-		return AgentTask{}, fmt.Errorf("task id, kind, title, and status are required")
+	if err := bounded("task id", task.ID, 256); err != nil {
+		return AgentTask{}, err
+	}
+	if err := bounded("task kind", task.Kind, 128); err != nil {
+		return AgentTask{}, err
+	}
+	if err := bounded("task title", task.Title, 1024); err != nil {
+		return AgentTask{}, err
+	}
+	if task.Status != "PENDING_APPROVAL" {
+		return AgentTask{}, fmt.Errorf("new task status must be PENDING_APPROVAL")
 	}
 	if task.RequestedAt.IsZero() {
 		task.RequestedAt = time.Now().UTC()
@@ -375,8 +450,17 @@ func (s *Store) CreateTask(task AgentTask) (AgentTask, error) {
 	if task.Input == nil {
 		task.Input = json.RawMessage(`{}`)
 	}
+	if len(task.Input) > maxActivityBytes || !json.Valid(task.Input) {
+		return AgentTask{}, fmt.Errorf("task input must be valid JSON up to %d bytes", maxActivityBytes)
+	}
 	_, err := s.db.Exec(`INSERT INTO agent_tasks(id, kind, title, command_id, input, status, requested_at) VALUES (?, ?, ?, ?, ?, ?, ?)`, task.ID, task.Kind, task.Title, task.CommandID, string(task.Input), task.Status, task.RequestedAt.UTC().Format(time.RFC3339Nano))
-	return task, err
+	if err != nil {
+		return AgentTask{}, err
+	}
+	if err := s.pruneTasks(); err != nil {
+		return AgentTask{}, fmt.Errorf("prune tasks: %w", err)
+	}
+	return task, nil
 }
 
 func (s *Store) TaskByID(id string) (AgentTask, error) {
@@ -450,9 +534,15 @@ func (s *Store) RecentTasks(limit int) ([]AgentTask, error) {
 	return tasks, rows.Err()
 }
 
-func (s *Store) SetTaskStatus(id, status, errorText string, result any) (AgentTask, error) {
-	if id == "" || status == "" {
-		return AgentTask{}, fmt.Errorf("task id and status are required")
+func (s *Store) TransitionTask(id, fromStatus, toStatus, errorText string, result any) (AgentTask, error) {
+	if err := bounded("task id", id, 256); err != nil {
+		return AgentTask{}, err
+	}
+	if err := bounded("source task status", fromStatus, 64); err != nil {
+		return AgentTask{}, err
+	}
+	if err := bounded("target task status", toStatus, 64); err != nil {
+		return AgentTask{}, err
 	}
 	var resultJSON any
 	if result != nil {
@@ -460,19 +550,48 @@ func (s *Store) SetTaskStatus(id, status, errorText string, result any) (AgentTa
 		if err != nil {
 			return AgentTask{}, fmt.Errorf("marshal task result: %w", err)
 		}
+		if len(encoded) > maxActivityBytes {
+			return AgentTask{}, fmt.Errorf("task result exceeds %d bytes", maxActivityBytes)
+		}
 		resultJSON = string(encoded)
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	_, err := s.db.Exec(`UPDATE agent_tasks SET status=?, approved_at=CASE WHEN ?='APPROVED' THEN ? ELSE approved_at END, started_at=CASE WHEN ?='RUNNING' THEN ? ELSE started_at END, completed_at=CASE WHEN ? IN ('COMPLETED','FAILED','CANCELLED','TAKEOVER') THEN ? ELSE completed_at END, result=COALESCE(?, result), error=? WHERE id=?`, status, status, now, status, now, status, now, resultJSON, errorText, id)
+	resultSet := ""
+	if resultJSON != nil {
+		resultSet = resultJSON.(string)
+	}
+	outcome, err := s.db.Exec(`UPDATE agent_tasks SET status=?, approved_at=CASE WHEN ?='APPROVED' THEN ? ELSE approved_at END, started_at=CASE WHEN ?='RUNNING' THEN ? ELSE started_at END, completed_at=CASE WHEN ? IN ('COMPLETED','FAILED','CANCELLED','TAKEOVER') THEN ? ELSE completed_at END, result=CASE WHEN ?='' THEN result ELSE ? END, error=? WHERE id=? AND status=?`, toStatus, toStatus, now, toStatus, now, toStatus, now, resultSet, resultSet, errorText, id, fromStatus)
 	if err != nil {
 		return AgentTask{}, err
+	}
+	changed, err := outcome.RowsAffected()
+	if err != nil {
+		return AgentTask{}, err
+	}
+	if changed != 1 {
+		return AgentTask{}, fmt.Errorf("task %s is no longer %s", id, fromStatus)
 	}
 	return s.TaskByID(id)
 }
 
 func (s *Store) CreateSkill(skill Skill) (Skill, error) {
-	if skill.ID == "" || skill.Name == "" || skill.Description == "" || skill.Body == "" || skill.Status == "" || skill.Source == "" {
-		return Skill{}, fmt.Errorf("skill id, name, description, body, status, and source are required")
+	if err := bounded("skill id", skill.ID, 256); err != nil {
+		return Skill{}, err
+	}
+	if err := bounded("skill name", skill.Name, 256); err != nil {
+		return Skill{}, err
+	}
+	if err := bounded("skill description", skill.Description, 2048); err != nil {
+		return Skill{}, err
+	}
+	if err := bounded("skill body", skill.Body, maxSkillBytes); err != nil {
+		return Skill{}, err
+	}
+	if skill.Status != "DRAFT" {
+		return Skill{}, fmt.Errorf("new skill status must be DRAFT")
+	}
+	if err := bounded("skill source", skill.Source, 128); err != nil {
+		return Skill{}, err
 	}
 	now := time.Now().UTC()
 	if skill.CreatedAt.IsZero() {
@@ -482,12 +601,21 @@ func (s *Store) CreateSkill(skill Skill) (Skill, error) {
 		skill.UpdatedAt = now
 	}
 	_, err := s.db.Exec(`INSERT INTO skills(id, name, description, body, status, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, skill.ID, skill.Name, skill.Description, skill.Body, skill.Status, skill.Source, skill.CreatedAt.UTC().Format(time.RFC3339Nano), skill.UpdatedAt.UTC().Format(time.RFC3339Nano))
-	return skill, err
+	if err != nil {
+		return Skill{}, err
+	}
+	if err := s.pruneSkills(); err != nil {
+		return Skill{}, fmt.Errorf("prune skills: %w", err)
+	}
+	return skill, nil
 }
 
 func (s *Store) SetSkillStatus(id, status string) (Skill, error) {
-	if id == "" || status == "" {
-		return Skill{}, fmt.Errorf("skill id and status are required")
+	if err := bounded("skill id", id, 256); err != nil {
+		return Skill{}, err
+	}
+	if status != "APPROVED" && status != "ARCHIVED" {
+		return Skill{}, fmt.Errorf("unsupported skill status")
 	}
 	_, err := s.db.Exec(`UPDATE skills SET status=?, updated_at=? WHERE id=?`, status, time.Now().UTC().Format(time.RFC3339Nano), id)
 	if err != nil {

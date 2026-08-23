@@ -10,9 +10,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/whoami22888/JARVIS-AGI/network-ninja-master/internal/device"
@@ -20,14 +23,17 @@ import (
 )
 
 const (
-	StatusPending  = "PENDING_APPROVAL"
-	StatusApproved = "APPROVED"
-	StatusRunning  = "RUNNING"
-	StatusComplete = "COMPLETED"
-	StatusFailed   = "FAILED"
-	StatusCanceled = "CANCELLED"
-	StatusTakeover = "TAKEOVER"
+	StatusPending       = "PENDING_APPROVAL"
+	StatusApproved      = "APPROVED"
+	StatusRunning       = "RUNNING"
+	StatusComplete      = "COMPLETED"
+	StatusFailed        = "FAILED"
+	StatusCanceled      = "CANCELLED"
+	StatusTakeover      = "TAKEOVER"
+	maxRemoteReplyBytes = 4096
 )
+
+var eventSequence atomic.Uint64
 
 type Command struct {
 	ID               string `json:"id"`
@@ -57,18 +63,23 @@ type ChatResponse struct {
 }
 
 type Service struct {
-	state    *store.Store
-	endpoint string
-	apiKey   string
-	client   *http.Client
+	state              *store.Store
+	endpoint           string
+	apiKey             string
+	allowContextEgress bool
+	client             *http.Client
 }
 
 func New(state *store.Store) *Service {
 	return &Service{
-		state:    state,
-		endpoint: strings.TrimSpace(os.Getenv("NETWORK_NINJA_CHAT_ENDPOINT")),
-		apiKey:   strings.TrimSpace(os.Getenv("NETWORK_NINJA_CHAT_API_KEY")),
-		client:   &http.Client{Timeout: 12 * time.Second},
+		state:              state,
+		endpoint:           strings.TrimSpace(os.Getenv("NETWORK_NINJA_CHAT_ENDPOINT")),
+		apiKey:             strings.TrimSpace(os.Getenv("NETWORK_NINJA_CHAT_API_KEY")),
+		allowContextEgress: os.Getenv("NETWORK_NINJA_CHAT_ALLOW_CONTEXT_EGRESS") == "1",
+		client: &http.Client{
+			Timeout:       12 * time.Second,
+			CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse },
+		},
 	}
 }
 
@@ -90,7 +101,7 @@ func commandByID(id string) (Command, bool) {
 }
 
 func eventID(kind string) string {
-	return fmt.Sprintf("%s-%s", kind, time.Now().UTC().Format("20060102T150405.000000000Z"))
+	return fmt.Sprintf("%s-%s-%06d", kind, time.Now().UTC().Format("20060102T150405.000000000Z"), eventSequence.Add(1))
 }
 
 func (s *Service) Context() (ContextSummary, error) {
@@ -152,7 +163,7 @@ func (s *Service) StartTakeover() error {
 	}
 	for _, task := range tasks {
 		if task.Status == StatusPending || task.Status == StatusApproved {
-			if _, err := s.state.SetTaskStatus(task.ID, StatusTakeover, "operator takeover enabled", nil); err != nil {
+			if _, err := s.state.TransitionTask(task.ID, task.Status, StatusTakeover, "operator takeover enabled", nil); err != nil {
 				return err
 			}
 		}
@@ -204,7 +215,7 @@ func (s *Service) Cancel(taskID string) (store.AgentTask, error) {
 	if task.Status != StatusPending && task.Status != StatusApproved {
 		return store.AgentTask{}, fmt.Errorf("task %s cannot be cancelled from %s", taskID, task.Status)
 	}
-	task, err = s.state.SetTaskStatus(taskID, StatusCanceled, "operator cancelled", nil)
+	task, err = s.state.TransitionTask(taskID, task.Status, StatusCanceled, "operator cancelled", nil)
 	if err == nil {
 		_, _ = s.recordActivity("task", "Operator cancelled: "+task.Title, map[string]any{"task_id": task.ID})
 	}
@@ -225,22 +236,22 @@ func (s *Service) ApproveAndRun(taskID string) (store.AgentTask, error) {
 	if _, ok := commandByID(task.CommandID); !ok {
 		return store.AgentTask{}, fmt.Errorf("task command %q is not in the approved catalog", task.CommandID)
 	}
-	if _, err = s.state.SetTaskStatus(taskID, StatusApproved, "", nil); err != nil {
+	if _, err = s.state.TransitionTask(taskID, StatusPending, StatusApproved, "", nil); err != nil {
 		return store.AgentTask{}, err
 	}
-	if _, err = s.state.SetTaskStatus(taskID, StatusRunning, "", nil); err != nil {
+	if _, err = s.state.TransitionTask(taskID, StatusApproved, StatusRunning, "", nil); err != nil {
 		return store.AgentTask{}, err
 	}
 	_, _ = s.recordActivity("approval", "Operator approved: "+task.Title, map[string]any{"task_id": task.ID, "command_id": task.CommandID})
 	result, runErr := s.execute(task.CommandID)
 	if runErr != nil {
-		task, err = s.state.SetTaskStatus(taskID, StatusFailed, runErr.Error(), map[string]any{"error": runErr.Error()})
+		task, err = s.state.TransitionTask(taskID, StatusRunning, StatusFailed, runErr.Error(), map[string]any{"error": runErr.Error()})
 		if err == nil {
 			_, _ = s.recordActivity("task", "Task failed: "+task.Title, map[string]any{"task_id": task.ID, "error": runErr.Error()})
 		}
 		return task, err
 	}
-	task, err = s.state.SetTaskStatus(taskID, StatusComplete, "", result)
+	task, err = s.state.TransitionTask(taskID, StatusRunning, StatusComplete, "", result)
 	if err == nil {
 		_, _ = s.recordActivity("task", "Task completed: "+task.Title, map[string]any{"task_id": task.ID, "command_id": task.CommandID})
 	}
@@ -352,15 +363,15 @@ func firstLine(text string, limit int) string {
 }
 
 func (s *Service) contextualReply(ctx context.Context, input string) string {
-	if remote, ok := s.optionalReasoner(ctx, input); ok {
-		return remote
-	}
 	contextSummary, err := s.Context()
 	if err != nil {
 		return "I could not read local context right now. Please refresh the console and try again."
 	}
 	if contextSummary.Takeover {
 		return "I am standing by while takeover mode is active. When you are ready, end takeover and I can prepare a fresh action card."
+	}
+	if remote, ok := s.optionalReasoner(ctx, input); ok {
+		return remote
 	}
 	return fmt.Sprintf("Got it. I am using %d recent chat messages, %d durable notes, and %d timeline events to keep the thread together. I can explain the current state, draft a skill with `skill:`, or prepare a visible local inventory action for your approval.", contextSummary.Messages, contextSummary.Memories, contextSummary.Activities)
 }
@@ -369,30 +380,35 @@ func (s *Service) contextualReply(ctx context.Context, input string) string {
 // If the configured endpoint is absent, unavailable, or malformed, the local
 // context accelerator remains fully functional.
 func (s *Service) optionalReasoner(ctx context.Context, input string) (string, bool) {
-	if s.endpoint == "" {
+	endpoint, ok := safeReasonerEndpoint(s.endpoint)
+	if !ok {
 		return "", false
 	}
-	messages, err := s.state.RecentMessages(12)
-	if err != nil {
-		return "", false
+	contextLines := []string{"Latest request:\n" + input}
+	if s.allowContextEgress {
+		messages, err := s.state.RecentMessages(12)
+		if err != nil {
+			return "", false
+		}
+		memory, err := s.state.RecentMemories(8)
+		if err != nil {
+			return "", false
+		}
+		contextLines = make([]string, 0, len(messages)+len(memory)+1)
+		for _, item := range memory {
+			contextLines = append(contextLines, "memory: "+item.MemoryKey+" = "+item.Value)
+		}
+		for _, item := range messages {
+			contextLines = append(contextLines, item.Role+": "+item.Content)
+		}
+		contextLines = append(contextLines, "Latest request:\n"+input)
 	}
-	memory, err := s.state.RecentMemories(8)
-	if err != nil {
-		return "", false
-	}
-	contextLines := make([]string, 0, len(messages)+len(memory))
-	for _, item := range memory {
-		contextLines = append(contextLines, "memory: "+item.MemoryKey+" = "+item.Value)
-	}
-	for _, item := range messages {
-		contextLines = append(contextLines, item.Role+": "+item.Content)
-	}
-	payload := map[string]any{"messages": []map[string]string{{"role": "system", "content": "You are a concise, collaborative local operations coworker. You have no authority to execute commands. Explain that any consequential action needs a visible human approval."}, {"role": "user", "content": "Context:\n" + strings.Join(contextLines, "\n") + "\n\nLatest request:\n" + input}}, "max_tokens": 280}
+	payload := map[string]any{"messages": []map[string]string{{"role": "system", "content": "You are a concise, collaborative local operations coworker. You have no authority to execute commands. Explain that any consequential action needs a visible human approval."}, {"role": "user", "content": strings.Join(contextLines, "\n")}}, "max_tokens": 280}
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return "", false
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.endpoint, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint.String(), bytes.NewReader(body))
 	if err != nil {
 		return "", false
 	}
@@ -419,10 +435,29 @@ func (s *Service) optionalReasoner(ctx context.Context, input string) (string, b
 		return "", false
 	}
 	text := strings.TrimSpace(decoded.Choices[0].Message.Content)
-	if text == "" {
+	if text == "" || len(text) > maxRemoteReplyBytes {
 		return "", false
 	}
 	return text, true
+}
+
+func safeReasonerEndpoint(raw string) (*url.URL, bool) {
+	if raw == "" {
+		return nil, false
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.User != nil || parsed.Hostname() == "" {
+		return nil, false
+	}
+	if parsed.Scheme == "https" {
+		return parsed, true
+	}
+	if parsed.Scheme != "http" {
+		return nil, false
+	}
+	host := strings.Trim(parsed.Hostname(), "[]")
+	ip := net.ParseIP(host)
+	return parsed, host == "localhost" || (ip != nil && ip.IsLoopback())
 }
 
 func (s *Service) Messages() ([]store.ConversationMessage, error) { return s.state.RecentMessages(80) }
