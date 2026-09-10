@@ -80,7 +80,7 @@ class AgentViewModel : ViewModel() {
     fun initialize(activity: ComponentActivity) {
         vault = TokenVault(activity)
         memoryStore = MemoryStore(activity)
-        ownerPreferences = activity.getSharedPreferences("owner_integrations", ComponentActivity.MODE_PRIVATE)
+        ownerPreferences = activity.getSharedPreferences("owner_integrations", 0)
         ownerSelected = ownerPreferences.getStringSet("selected", emptySet())?.toSet() ?: emptySet()
         ownerApproved = ownerPreferences.getBoolean("approved", false)
         installSetupVisible = !ownerApproved
@@ -219,9 +219,10 @@ fun WhiteRabbitApp(activity: ComponentActivity, vm: AgentViewModel = viewModel()
                 Destination.Mcp -> RegistryScreen(vm, "mcp", "MCP Registry", "Store trusted MCP endpoint metadata. Credentials remain on the authorized gateway.")
                 Destination.Memory -> MemoryScreen(vm)
             }
-        }) }
+        }
         if (vm.installSetupVisible) OwnerSetupDialog(vm)
     }
+}
 }
 
 @Composable private fun OwnerSetupDialog(vm: AgentViewModel) {
