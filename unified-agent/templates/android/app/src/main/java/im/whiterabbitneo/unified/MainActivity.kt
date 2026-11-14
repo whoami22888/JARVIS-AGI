@@ -1,8 +1,14 @@
 package im.whiterabbitneo.unified
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.view.PreviewView
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -12,10 +18,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
+import im.whiterabbitneo.unified.connectors.OAuthRedirectBus
 import im.whiterabbitneo.unified.data.GatewayCandidate
 import im.whiterabbitneo.unified.data.GatewayClient
 import im.whiterabbitneo.unified.data.GatewayDiscovery
@@ -24,6 +35,13 @@ import im.whiterabbitneo.unified.data.HudRouteStates
 import im.whiterabbitneo.unified.data.ManagedGatewayConfig
 import im.whiterabbitneo.unified.data.MemoryStore
 import im.whiterabbitneo.unified.data.TokenVault
+import im.whiterabbitneo.unified.ui.ConnectorsScreen
+import im.whiterabbitneo.unified.ui.ConnectorViewModel
+import im.whiterabbitneo.unified.vision.CameraVision
+import im.whiterabbitneo.unified.vision.VisionLabel
+import im.whiterabbitneo.unified.voice.SpeechToTextEngine
+import im.whiterabbitneo.unified.voice.TextToSpeechEngine
+import im.whiterabbitneo.unified.voice.VoskModelManager
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
@@ -32,7 +50,7 @@ private val Panel = Color(0xFF10261D)
 private val Mint = Color(0xFF9EFFC8)
 private val Muted = Color(0xFFB9CCBE)
 
-enum class Destination(val label: String) { Command("Command"), Tools("Tools"), Skills("Skills"), Mcp("MCP"), Memory("Memory") }
+enum class Destination(val label: String) { Command("Command"), Tools("Tools"), Skills("Skills"), Mcp("MCP"), Memory("Memory"), Accounts("Accounts") }
 
 class AgentViewModel : ViewModel() {
     var gatewayUrl by mutableStateOf("")
@@ -153,12 +171,20 @@ class AgentViewModel : ViewModel() {
 }
 
 class MainActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); setContent { WhiteRabbitApp(this) } }
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent { WhiteRabbitApp(this) }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        intent.data?.let { OAuthRedirectBus.deliver(it) }
+    }
 }
 
 @Composable
-fun WhiteRabbitApp(activity: ComponentActivity, vm: AgentViewModel = viewModel()) {
-    LaunchedEffect(Unit) { vm.initialize(activity) }
+fun WhiteRabbitApp(activity: ComponentActivity, vm: AgentViewModel = viewModel(), connectorVm: ConnectorViewModel = viewModel()) {
+    LaunchedEffect(Unit) { vm.initialize(activity); connectorVm.initialize(activity) }
     var destination by remember { mutableStateOf(Destination.Command) }
     MaterialTheme(colorScheme = darkColorScheme(primary = Mint, secondary = Mint, surface = Panel, background = Ink, onPrimary = Ink, onBackground = Color.White)) {
         Scaffold(containerColor = Ink, bottomBar = {
@@ -174,6 +200,7 @@ fun WhiteRabbitApp(activity: ComponentActivity, vm: AgentViewModel = viewModel()
                 Destination.Skills -> RegistryScreen(vm, "skill", "Skills", "Save reusable agent instructions with explicit allowed tools.")
                 Destination.Mcp -> RegistryScreen(vm, "mcp", "MCP Registry", "Store trusted MCP endpoint metadata. Credentials remain on the authorized gateway.")
                 Destination.Memory -> MemoryScreen(vm)
+                Destination.Accounts -> ConnectorsScreen(connectorVm)
             }
         } }
     }
@@ -181,7 +208,13 @@ fun WhiteRabbitApp(activity: ComponentActivity, vm: AgentViewModel = viewModel()
 
 @Composable private fun StatusCard(status: String, paired: Boolean, routeState: HudRouteState) = Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(14.dp)) { Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Column { Text(if (paired) "SECURE GATEWAY LINK" else "SETUP REQUIRED", color = Mint, style = MaterialTheme.typography.labelMedium); Text(status, color = Muted, style = MaterialTheme.typography.bodySmall) }; AssistChip(onClick = {}, label = { Text(if (paired) routeState.mode.chip else "OFFLINE") }) } }
 
-@Composable private fun CommandScreen(vm: AgentViewModel) { val scope = rememberCoroutineScope(); var prompt by remember { mutableStateOf("") }; var web by remember { mutableStateOf(false) }; var api by remember { mutableStateOf(false) }; var automation by remember { mutableStateOf(false) }; Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+@Composable private fun CommandScreen(vm: AgentViewModel) {
+    val scope = rememberCoroutineScope()
+    var prompt by remember { mutableStateOf("") }
+    var web by remember { mutableStateOf(false) }
+    var api by remember { mutableStateOf(false) }
+    var automation by remember { mutableStateOf(false) }
+    Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
     Card(colors = CardDefaults.cardColors(containerColor = Panel)) { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("TRUSTED GATEWAY SETUP", color = Mint, fontWeight = FontWeight.Bold)
         Text(if (vm.enrollmentAvailable) vm.gatewayUrl else "Managed gateway configuration unavailable", color = Muted, style = MaterialTheme.typography.bodySmall)
@@ -207,10 +240,96 @@ fun WhiteRabbitApp(activity: ComponentActivity, vm: AgentViewModel = viewModel()
     CapabilityToggle("Web read — public HTTPS only", web) { web = it; vm.enabled = vm.enabled.toMutableSet().apply { if (it) add("web_read") else remove("web_read") } }
     CapabilityToggle("API calls — gateway-authorized only", api) { api = it; vm.enabled = vm.enabled.toMutableSet().apply { if (it) add("api_call") else remove("api_call") } }
     CapabilityToggle("Automation — always proposed, never silent", automation) { automation = it; vm.enabled = vm.enabled.toMutableSet().apply { if (it) add("automation") else remove("automation") } }
+    VoiceVisionCard(onPrompt = { prompt = it })
     OutlinedTextField(value = prompt, onValueChange = { prompt = it }, label = { Text("Ask the unified agent") }, modifier = Modifier.fillMaxWidth().height(140.dp))
     Button(onClick = { scope.launch { vm.run(prompt) } }, enabled = vm.paired && prompt.isNotBlank(), modifier = Modifier.fillMaxWidth()) { Text("Run unified agent") }
-    if (vm.answer.isNotBlank()) Card(colors = CardDefaults.cardColors(containerColor = Panel)) { Text(vm.answer, Modifier.padding(14.dp), color = Color.White) }
+    if (vm.answer.isNotBlank()) Card(colors = CardDefaults.cardColors(containerColor = Panel)) {
+        Column(Modifier.padding(14.dp)) {
+            Text(vm.answer, color = Color.White)
+            SpeakAnswerButton(vm.answer)
+        }
+    }
 } }
+
+@Composable private fun VoiceVisionCard(onPrompt: (String) -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var modelProgress by remember { mutableStateOf<Float?>(null) }
+    var engineError by remember { mutableStateOf<String?>(null) }
+    var listening by remember { mutableStateOf(false) }
+    var visionVisible by remember { mutableStateOf(false) }
+    var labels by remember { mutableStateOf<List<VisionLabel>>(emptyList()) }
+    val stt = remember { SpeechToTextEngine(context) }
+    val vision = remember { CameraVision(context, lifecycleOwner) }
+    DisposableEffect(Unit) { onDispose { stt.stop(); vision.release() } }
+    fun startListening() {
+        scope.launch {
+            engineError = null
+            modelProgress = 0f
+            try {
+                val path = VoskModelManager.ensureModel(context) { modelProgress = it }
+                stt.start(
+                    modelPath = path,
+                    onPartial = { onPrompt(it) },
+                    onFinal = { onPrompt(it) },
+                    onError = { engineError = it },
+                )
+                listening = true
+            } catch (e: Exception) {
+                engineError = e.message ?: "Speech model unavailable"
+            }
+            modelProgress = null
+        }
+    }
+    val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) startListening()
+    }
+    val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> if (granted) visionVisible = true }
+    Card(colors = CardDefaults.cardColors(containerColor = Panel)) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("VOICE & VISION", color = Mint, fontWeight = FontWeight.Bold)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = {
+                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                        startListening()
+                    } else {
+                        micPermission.launch(Manifest.permission.RECORD_AUDIO)
+                    }
+                }, enabled = !listening) { Text(if (listening) "Listening…" else "Dictate") }
+                if (listening) {
+                    OutlinedButton(onClick = { stt.stop(); listening = false }) { Text("Stop") }
+                }
+                OutlinedButton(onClick = {
+                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                        visionVisible = !visionVisible
+                    } else {
+                        cameraPermission.launch(Manifest.permission.CAMERA)
+                    }
+                }) { Text(if (visionVisible) "Hide camera" else "Camera vision") }
+            }
+            modelProgress?.let { progress -> LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth()) }
+            engineError?.let { Text(it, color = Color(0xFFFF8A80), style = MaterialTheme.typography.bodySmall) }
+            if (visionVisible) {
+                AndroidView(
+                    factory = { ctx ->
+                        PreviewView(ctx).also { preview -> vision.start(preview) { detected -> labels = detected } }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(220.dp),
+                )
+                Text(if (labels.isEmpty()) "Point the camera at objects" else labels.joinToString(" · ") { "${it.text} ${(it.confidence * 100).toInt()}%" }, color = Muted, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+}
+
+@Composable private fun SpeakAnswerButton(answer: String) {
+    val context = LocalContext.current
+    val tts = remember { TextToSpeechEngine(context) }
+    LaunchedEffect(Unit) { tts.initialize() }
+    DisposableEffect(Unit) { onDispose { tts.shutdown() } }
+    OutlinedButton(onClick = { tts.speak(answer) }, modifier = Modifier.fillMaxWidth()) { Text("Speak answer aloud") }
+}
 
 @Composable private fun CapabilityToggle(label: String, checked: Boolean, changed: (Boolean) -> Unit) = Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Switch(checked = checked, onCheckedChange = changed); Spacer(Modifier.width(10.dp)); Text(label, color = Muted, style = MaterialTheme.typography.bodyMedium) }
 

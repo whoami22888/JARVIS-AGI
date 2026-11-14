@@ -1,6 +1,11 @@
 package im.whiterabbitneo.unified.data
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -62,4 +67,45 @@ class GatewayClient {
     suspend fun createRegistryItem(url: String, token: String, kind: String, name: String, definition: JSONObject) {
         request(url, "/v1/registry", "POST", JSONObject().put("kind", kind).put("name", name).put("definition", definition), token)
     }
+
+    fun taskEvents(url: String, token: String, prompt: String, enabled: Set<String>): Flow<String> = callbackFlow {
+        require(url.startsWith("https://")) { "Gateway URL must use HTTPS." }
+        val connection = (URL(url.trimEnd('/') + "/v1/tasks").openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            connectTimeout = 15000
+            readTimeout = 0
+            setRequestProperty("Accept", "text/event-stream")
+            setRequestProperty("Content-Type", "application/json")
+            setRequestProperty("Authorization", "Bearer $token")
+            doOutput = true
+        }
+        val payload = JSONObject()
+            .put("prompt", prompt)
+            .put("model", "deepseek-reasoner")
+            .put("stream", true)
+            .put("enabled_capabilities", JSONArray(enabled.toList()))
+        connection.outputStream.use { it.write(payload.toString().toByteArray()) }
+        val reader = launch(Dispatchers.IO) {
+            try {
+                if (connection.responseCode !in 200..299) {
+                    val detail = connection.errorStream.bufferedReader().use { it.readText() }
+                    close(IllegalStateException(JSONObject(detail).optString("detail", "Gateway stream failed")))
+                    return@launch
+                }
+                connection.inputStream.bufferedReader().forEachLine { line ->
+                    if (line.startsWith("data:")) {
+                        val data = line.removePrefix("data:").trim()
+                        if (data.isNotBlank() && data != "[DONE]") trySend(data)
+                    }
+                }
+                close()
+            } catch (e: Exception) {
+                close(e)
+            }
+        }
+        awaitClose {
+            reader.cancel()
+            connection.disconnect()
+        }
+    }.flowOn(Dispatchers.IO)
 }

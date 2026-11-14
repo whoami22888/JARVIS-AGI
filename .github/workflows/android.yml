@@ -1,0 +1,38 @@
+name: Android CI
+
+on:
+  push:
+    paths:
+      - "unified-agent/templates/android/**"
+      - "unified-agent/bootstrap_android.sh"
+      - ".github/workflows/android.yml"
+  pull_request:
+    paths:
+      - "unified-agent/templates/android/**"
+      - "unified-agent/bootstrap_android.sh"
+      - ".github/workflows/android.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: "temurin"
+      - name: Generate Android project
+        run: ./unified-agent/bootstrap_android.sh
+      - name: Run unit tests
+        run: ./gradlew :app:testMinimalDebugUnitTest
+        working-directory: unified-agent/android
+      - name: Build minimal debug APK
+        run: ./gradlew :app:assembleMinimalDebug
+        working-directory: unified-agent/android
+      - name: Build full debug APK
+        run: ./gradlew :app:assembleFullDebug
+        working-directory: unified-agent/android
+      - uses: actions/upload-artifact@v4
+        with:
+          name: white-rabbit-neo-apks
+          path: unified-agent/android/app/build/outputs/apk/
