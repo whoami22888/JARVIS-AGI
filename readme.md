@@ -53,6 +53,49 @@ JARVIS-AGI is an advanced AI project designed to integrate multiple AI capabilit
 - **Image Analysis**: Perform image recognition and processing tasks.
 - **Audio Tools**: Detect hotwords and manage audio playback interruptions.
 - **Interactive Prompts**: Predefined prompts to guide AI interactions.
+- **Uncensored AI Persona (BLACKHAT)**: Raw, unfiltered AI assistant with no knowledge restrictions or safety filters. Answers any question fully and honestly.
+- **Multi-Provider AI Account Manager**: Unified interface for managing OpenRouter, DeepInfra, HuggingFace, DeepSeek, Local Ollama, and more with automatic fallback chain.
+
+## BLACKHAT Uncensored Persona
+
+JARVIS-AGI now includes a **BLACKHAT** mode - an uncensored, unfiltered AI persona that:
+- **No knowledge restrictions**: Answers any question fully (hacking, security, code, controversial topics)
+- **No safety disclaimers**: Raw, direct responses without moral qualifications
+- **No fake backstory**: No amnesia roleplay - just honest, capable assistance
+- **Human-like speech**: Contractions, humor, wit, concise TTS-friendly responses
+- **Free by default**: Uses OpenRouter free tier (Llama 3 8B, Mistral 7B, Zephyr 7B)
+
+### AI Account Manager (`TOOLS/AIAccountManager.py`)
+
+Manage multiple AI subscriptions with automatic fallback:
+
+```bash
+# List all configured providers
+python -m TOOLS.AIAccountManager list
+
+# Test providers
+python -m TOOLS.AIAccountManager test
+python -m TOOLS.AIAccountManager test openrouter
+
+# Add API key for a provider
+python -m TOOLS.AIAccountManager add openrouter sk-or-xxxxxxxxxxxx
+
+# Set fallback priority chain
+python -m TOOLS.AIAccountManager fallback openrouter,deepinfra,huggingface,local_ollama
+
+# Show best available provider
+python -m TOOLS.AIAccountManager best
+```
+
+**Supported Providers:**
+| Provider | Free Tier | Setup |
+|----------|-----------|-------|
+| OpenRouter | ✅ Best (4+ models) | Get key at openrouter.ai/keys |
+| DeepInfra | ✅ Good | Get key at deepinfra.com |
+| HuggingFace | ✅ Rate limited | Get token at huggingface.co/settings/tokens |
+| Local Ollama | ✅ Unlimited | Install ollama.com, pull models |
+| DeepSeek | ❌ Paid | platform.deepseek.com |
+| OpenGPT | ❌ Hosted | opengpts-example... |
 
 ## Directory Structure
 

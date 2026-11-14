@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "accounts": {
+    "openrouter": {
+      "name": "openrouter",
+      "enabled": true,
+      "priority": 1,
+      "api_key": "",
+      "base_url": "https://openrouter.ai/api/v1",
+      "model": "meta-llama/llama-3-8b-instruct:free",
+      "extra": {}
+    },
+    "deepinfra": {
+      "name": "deepinfra",
+      "enabled": true,
+      "priority": 2,
+      "api_key": "",
+      "base_url": "https://api.deepinfra.com/v1/openai",
+      "model": "meta-llama/Meta-Llama-3.1-405B-Instruct",
+      "extra": {}
+    },
+    "huggingface": {
+      "name": "huggingface",
+      "enabled": false,
+      "priority": 3,
+      "api_key": "",
+      "base_url": "https://api-inference.huggingface.co",
+      "model": "meta-llama/Meta-Llama-3-70B-Instruct",
+      "extra": {}
+    },
+    "deepseek": {
+      "name": "deepseek",
+      "enabled": false,
+      "priority": 4,
+      "api_key": "",
+      "base_url": "https://api.deepseek.com/v1",
+      "model": "deepseek-reasoner",
+      "extra": {}
+    },
+    "opengpt": {
+      "name": "opengpt",
+      "enabled": false,
+      "priority": 5,
+      "api_key": "",
+      "base_url": "https://opengpts-example-vz4y4ooboq-uc.a.run.app",
+      "model": "gpt-3.5-turbo",
+      "extra": {
+        "assistant_id": "",
+        "user_id": ""
+      }
+    },
+    "liaobots": {
+      "name": "liaobots",
+      "enabled": false,
+      "priority": 6,
+      "api_key": "",
+      "base_url": "https://api.liaobots.com",
+      "model": "gpt-3.5-turbo",
+      "extra": {}
+    },
+    "local_ollama": {
+      "name": "local_ollama",
+      "enabled": true,
+      "priority": 0,
+      "api_key": "",
+      "base_url": "http://127.0.0.1:11434/v1",
+      "model": "llama3.1:70b",
+      "extra": {}
+    }
+  },
+  "fallback_chain": [
+    "local_ollama",
+    "openrouter",
+    "deepinfra",
+    "huggingface",
+    "deepseek",
+    "opengpt",
+    "liaobots"
+  ]
+}

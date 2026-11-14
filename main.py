@@ -43,6 +43,65 @@
 
 from IMPORTS import *
 
+# Use blackhat as primary uncensored AI
+from BRAIN.AI.TEXT.API import blackhat
+from TOOLS.AIAccountManager import AIAccountManager
+
+# Initialize AI Account Manager for multi-provider fallback
+ai_manager = AIAccountManager()
+
+
+def generate_with_fallback(conversation_history, system_prompt=None, stream=False, **kwargs):
+    """Generate response using fallback chain of providers."""
+    # Try blackhat (OpenRouter free) first as primary
+    try:
+        return blackhat.generate(
+            conversation_history,
+            system_prompt=system_prompt or INSTRUCTIONS.human_response_uncensored_v1,
+            stream=stream,
+            **kwargs,
+        )
+    except Exception as e:
+        print(f"[Fallback] Blackhat failed: {e}")
+
+    # Fallback to other providers via account manager
+    for provider_id in ai_manager.fallback_chain:
+        if provider_id == "openrouter":
+            continue  # Already tried via blackhat
+        try:
+            account = ai_manager.accounts.get(provider_id)
+            if account and account.enabled and (account.api_key or provider_id == "local_ollama"):
+                # Import and use provider dynamically
+                if provider_id == "deepinfra":
+                    from BRAIN.AI.TEXT.API import deepInfra_TEXT
+                    return deepInfra_TEXT.generate(
+                        conversation_history,
+                        system_prompt=system_prompt or INSTRUCTIONS.human_response_uncensored_v1,
+                        stream=stream,
+                        **kwargs,
+                    )
+                elif provider_id == "huggingface":
+                    from BRAIN.AI.TEXT.API import Hugging_Face_TEXT
+                    return Hugging_Face_TEXT.generate(
+                        conversation_history[-1]["content"] if conversation_history else "",
+                        system_prompt=system_prompt or INSTRUCTIONS.human_response_uncensored_v1,
+                        **kwargs,
+                    )
+                elif provider_id == "local_ollama":
+                    from BRAIN.AI.TEXT.API.LOCAL import llama_CPP
+                    return llama_CPP.generate(
+                        conversation_history,
+                        system_prompt=system_prompt or INSTRUCTIONS.human_response_uncensored_v1,
+                        stream=stream,
+                        **kwargs,
+                    )
+        except Exception as e:
+            print(f"[Fallback] {provider_id} failed: {e}")
+            continue
+
+    return "All AI providers unavailable. Please check your API keys and network connection."
+
+
 while True:
 
     speech = listener.listen()
@@ -64,7 +123,7 @@ while True:
                 stream=False,
             )
             default_response = executor.submit(
-                openrouter.generate,
+                generate_with_fallback,
                 list(history_manager.history),
                 system_prompt=INSTRUCTIONS.human_response_uncensored_v1,
                 stream=False,
@@ -118,7 +177,11 @@ while True:
 
         elif "website" in response_classifier_text.lower():
             site_markdown = jenna_reader.fetch_website_content(chrome_latest_url.get_latest_chrome_url())
-            response = openrouter.generate(f"METEDATA: {site_markdown}\n\nQUERY: {speech}", system_prompt="Keep you responses very short and concise")
+            response = generate_with_fallback(
+                [{"role": "user", "content": f"METEDATA: {site_markdown}\n\nQUERY: {speech}"}],
+                system_prompt="Keep your responses very short and concise",
+                stream=False,
+            )
             speak(response, voice="Salli")
 
         else: 
@@ -134,7 +197,7 @@ while True:
         # chat_response = Phind.generate(history_manager.history, system_prompt=INSTRUCTIONS.human_response_v3_AVA, stream=True)
         
         # chat_response = Pi_Ai.generate(speech, prints=False)
-        chat_response = openrouter.generate(
+        chat_response = generate_with_fallback(
                 [{"role": "user", "content": speech}],
                 system_prompt=INSTRUCTIONS.human_response_uncensored_v1,
                 stream=False,
