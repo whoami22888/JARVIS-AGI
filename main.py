@@ -64,9 +64,9 @@ while True:
                 stream=False,
             )
             default_response = executor.submit(
-                deepInfra_TEXT.generate,
-                history_manager.history,
-                system_prompt=INSTRUCTIONS.human_response_v3_AVA,
+                openrouter.generate,
+                list(history_manager.history),
+                system_prompt=INSTRUCTIONS.human_response_uncensored_v1,
                 stream=False,
             )
             response_img_or_text_text = response_img_or_text.result()
@@ -134,7 +134,11 @@ while True:
         # chat_response = Phind.generate(history_manager.history, system_prompt=INSTRUCTIONS.human_response_v3_AVA, stream=True)
         
         # chat_response = Pi_Ai.generate(speech, prints=False)
-        chat_response = Hugging_Face_TEXT.generate(speech)
+        chat_response = openrouter.generate(
+                [{"role": "user", "content": speech}],
+                system_prompt=INSTRUCTIONS.human_response_uncensored_v1,
+                stream=False,
+            )
         print("\n\033[92mJARVIS >> {}\033[0m\n".format(chat_response))
         history_manager.update_file(speech, chat_response)
         speak(chat_response)

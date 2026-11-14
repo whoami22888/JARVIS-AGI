@@ -19,6 +19,7 @@ from ENGINE.TTS.speechify import speak
 
 from BRAIN.AI.TEXT.API import openrouter
 from BRAIN.AI.TEXT.API import deepInfra_TEXT
+from BRAIN.AI.TEXT.API import blackhat
 # from BRAIN.AI.TEXT.API import Phind
 # from BRAIN.AI.TEXT.API import Pi_Ai
 # from BRAIN.AI.TEXT.API import deepseek_ai
