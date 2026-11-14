@@ -31,9 +31,9 @@
         <domain includeSubdomains="true">graph.facebook.com</domain>
         <domain includeSubdomains="true">www.facebook.com</domain>
         <pin-set expiration="2027-12-31">
-            <!-- Backup pins for rotation - add actual SHA-256 pins here -->
-            <pin algorithm="SHA-256">BASE64_PIN_PLACEHOLDER_1</pin>
-            <pin algorithm="SHA-256">BASE64_PIN_PLACEHOLDER_2</pin>
+            <!-- Backup pins for rotation - add actual SHA-256 pins here if needed -->
+            <!-- <pin algorithm="SHA-256">BASE64_PIN_PLACEHOLDER_1</pin> -->
+            <!-- <pin algorithm="SHA-256">BASE64_PIN_PLACEHOLDER_2</pin> -->
         </pin-set>
         <trust-anchors><certificates src="system" /></trust-anchors>
     </domain-config>
