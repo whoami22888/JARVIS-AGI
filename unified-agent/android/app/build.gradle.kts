@@ -116,6 +116,7 @@ dependencies {
 
     // Audio (offline speech recognition)
     implementation("com.alphacephei:vosk-android:0.3.32")
+    implementation("net.java.dev.jna:jna:5.6.0@aar")
 
     // File access & background work
     implementation("androidx.documentfile:documentfile:1.0.1")
