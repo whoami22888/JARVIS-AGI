@@ -15,4 +15,9 @@
         android:restrictionType="string"
         android:title="@string/restriction_device_name_title"
         android:description="@string/restriction_device_name_description" />
+    <restriction
+        android:key="porcupine_access_key"
+        android:restrictionType="string"
+        android:title="@string/restriction_porcupine_access_key_title"
+        android:description="@string/restriction_porcupine_access_key_description" />
 </restrictions>

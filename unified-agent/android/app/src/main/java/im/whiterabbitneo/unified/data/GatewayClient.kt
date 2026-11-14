@@ -1,6 +1,11 @@
 package im.whiterabbitneo.unified.data
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -9,7 +14,6 @@ import java.net.URL
 
 data class Pairing(val deviceId: String, val token: String)
 data class TaskResult(val status: String, val answer: String, val route: String?)
-data class Usage(val dailyTokens: Int, val inputTokens: Int, val outputTokens: Int)
 data class GatewayHealth(
     val status: String,
     val localOllamaEnabled: Boolean,
@@ -55,25 +59,48 @@ class GatewayClient {
         return Pairing(response.getString("device_id"), response.getString("token"))
     }
 
-    suspend fun task(url: String, token: String, prompt: String, enabled: Set<String>, category: String = "general"): TaskResult {
-        val response = request(url, "/v1/tasks", "POST", JSONObject().put("prompt", prompt).put("model", "deepseek-reasoner").put("category", category).put("enabled_capabilities", JSONArray(enabled.toList())), token)
+    suspend fun task(url: String, token: String, prompt: String, enabled: Set<String>): TaskResult {
+        val response = request(url, "/v1/tasks", "POST", JSONObject().put("prompt", prompt).put("model", "deepseek-reasoner").put("enabled_capabilities", JSONArray(enabled.toList())), token)
         return TaskResult(response.getString("status"), response.optString("answer", ""), response.optString("route").takeIf { it.isNotBlank() })
-    }
-
-    suspend fun usage(url: String, token: String): Usage {
-        val response = request(url, "/v1/usage", "GET", token = token)
-        return Usage(response.optInt("daily_tokens"), response.optInt("input_tokens"), response.optInt("output_tokens"))
-    }
-
-    suspend fun setBudget(url: String, token: String, dailyTokens: Int) {
-        request(url, "/v1/usage/budget", "POST", JSONObject().put("daily_tokens", dailyTokens), token)
-    }
-
-    suspend fun createSchedule(url: String, token: String, name: String, intervalSeconds: Int, payload: JSONObject) {
-        request(url, "/v1/schedules", "POST", JSONObject().put("name", name).put("interval_seconds", intervalSeconds).put("payload", payload), token)
     }
 
     suspend fun createRegistryItem(url: String, token: String, kind: String, name: String, definition: JSONObject) {
         request(url, "/v1/registry", "POST", JSONObject().put("kind", kind).put("name", name).put("definition", definition), token)
     }
+
+    fun taskEvents(url: String, token: String, prompt: String, enabled: Set<String>): Flow<String> = callbackFlow {
+        require(url.startsWith("https://")) { "Gateway URL must use HTTPS." }
+        val connection = (URL(url.trimEnd('/') + "/v1/tasks").openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            connectTimeout = 15000
+            readTimeout = 0
+            setRequestProperty("Accept", "text/event-stream")
+            setRequestProperty("Content-Type", "application/json")
+            setRequestProperty("Authorization", "Bearer $token")
+            doOutput = true
+        }
+        val payload = JSONObject()
+            .put("prompt", prompt)
+            .put("model", "deepseek-reasoner")
+            .put("stream", true)
+            .put("enabled_capabilities", JSONArray(enabled.toList()))
+        try {
+            connection.outputStream.use { it.write(payload.toString().toByteArray()) }
+            if (connection.responseCode !in 200..299) {
+                val detail = connection.errorStream.bufferedReader().use { it.readText() }
+                close(IllegalStateException(JSONObject(detail).optString("detail", "Gateway stream failed")))
+            } else {
+                connection.inputStream.bufferedReader().forEachLine { line ->
+                    if (line.startsWith("data:")) {
+                        val data = line.removePrefix("data:").trim()
+                        if (data.isNotBlank() && data != "[DONE]") trySend(data)
+                    }
+                }
+            }
+            close()
+        } catch (e: Exception) {
+            close(e)
+        }
+        awaitClose { connection.disconnect() }
+    }.flowOn(Dispatchers.IO)
 }

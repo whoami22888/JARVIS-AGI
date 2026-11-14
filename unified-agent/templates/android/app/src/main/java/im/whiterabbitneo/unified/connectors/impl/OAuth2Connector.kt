@@ -47,10 +47,6 @@ class OAuth2Connector(private val definition: ConnectorDefinition) : ServiceConn
             put("client_id", clientId)
             put("code_verifier", inFlight.verifier)
             if (!clientSecret.isNullOrBlank()) put("client_secret", clientSecret)
-            if (!profile.tokenAuthInBody && !clientSecret.isNullOrBlank()) {
-                put("client_id", clientId)
-                put("client_secret", clientSecret)
-            }
         }
         val json = HttpJson.postForm(profile.tokenUrl, form, accessToken = null)
         HttpJson.parseTokenResponse(json, id)

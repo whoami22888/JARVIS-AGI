@@ -21,9 +21,9 @@ class StorageAccessManager(context: Context) {
         context.startActivity(intent)
     }
 
-    fun openDirectoryPicker(context: Context): Intent =
+    fun openDirectoryPicker(): Intent =
         Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
+            addCategory(Intent.CATEGORY_DEFAULT)
         }
 
     fun isBatteryUnrestricted(): Boolean {

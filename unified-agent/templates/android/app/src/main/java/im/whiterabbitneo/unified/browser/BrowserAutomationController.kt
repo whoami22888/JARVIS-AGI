@@ -69,7 +69,7 @@ class BrowserAutomationController(private val service: AccessibilityService) {
         return root.findAccessibilityNodeInfosByText(text)
     }
 
-    private inline fun <T> searchNodes(predicate: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo? {
+    private inline fun searchNodes(predicate: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo? {
         val root = service.rootInActiveWindow ?: return null
         val queue = ArrayDeque<AccessibilityNodeInfo>()
         queue.addLast(root)

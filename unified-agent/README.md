@@ -28,6 +28,12 @@ This project builds a single Android command-center application with a **WhiteRa
 | Automation | Proposal flow implemented | Every action must be proposed and locally approved; no silent device control. |
 | Tool and skill builder | Implemented registry forms | Tools and skills are defined as metadata, not arbitrary executable uploads. |
 | MCP registry | Implemented metadata registry | HTTPS MCP endpoint metadata can be registered; credentials remain server-side. |
+| Service connectors | Implemented (Android Accounts tab) | 20+ providers: API keys and OAuth2 (PKCE) with Keystore-encrypted tokens, Room registry, biometric reveal. |
+| Voice (STT/TTS) | Implemented | Vosk offline speech recognition (model downloads on first use) and Android TTS. |
+| Camera vision | Implemented | CameraX + ML Kit on-device object detection. |
+| Hotword | Implemented in the `full` flavor | Porcupine wake word in a microphone foreground service; requires a Picovoice access key via managed restrictions. |
+| Browser automation | Implemented (approval-gated) | AccessibilityService reads screen content on device and performs gestures only after local approval. |
+| Device admin | Implemented (owner-gated) | Lock screen, camera disable, password policy, wipe. |
 
 ## Generate the project
 
@@ -74,13 +80,15 @@ The generated project uses Java 17 bytecode targets, Android API 35, and Gradle 
 
 ```bash
 cd android
-./gradlew --no-daemon :app:assembleDebug
+./gradlew --no-daemon :app:assembleMinimalDebug
 ```
 
-The debug APK is produced at:
+Two product flavors exist: `minimal` (no hotword engine) and `full` (adds the
+Porcupine wake-word service; see `docs/ANDROID_BUILD.md`). The debug APK is
+produced at:
 
 ```text
-android/app/build/outputs/apk/debug/app-debug.apk
+android/app/build/outputs/apk/minimal/debug/app-minimal-debug.apk
 ```
 
 A debug APK is suitable only for test installation. Release distribution requires an owner-controlled keystore and a release signing configuration. A rebuilt application has a different signing certificate than the reference package and therefore cannot update it in place.
@@ -117,7 +125,7 @@ PYTHONPATH=backend python3 backend/tests/provider_response_validation_test.py
 PYTHONPATH=backend python3 backend/tests/discovery_validation_test.py
 PYTHONPATH=backend python3 backend/tests/discovery_advertiser_test.py
 PYTHONPATH=backend python3 backend/tests/smoke_test.py
-cd android && ./gradlew --no-daemon :app:assembleDebug
+cd android && ./gradlew --no-daemon :app:testMinimalDebugUnitTest :app:assembleMinimalDebug
 ```
 
 ## Security expectations

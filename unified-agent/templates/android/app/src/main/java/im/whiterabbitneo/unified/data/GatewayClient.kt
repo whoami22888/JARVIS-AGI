@@ -84,28 +84,23 @@ class GatewayClient {
             .put("model", "deepseek-reasoner")
             .put("stream", true)
             .put("enabled_capabilities", JSONArray(enabled.toList()))
-        connection.outputStream.use { it.write(payload.toString().toByteArray()) }
-        val reader = launch(Dispatchers.IO) {
-            try {
-                if (connection.responseCode !in 200..299) {
-                    val detail = connection.errorStream.bufferedReader().use { it.readText() }
-                    close(IllegalStateException(JSONObject(detail).optString("detail", "Gateway stream failed")))
-                    return@launch
-                }
+        try {
+            connection.outputStream.use { it.write(payload.toString().toByteArray()) }
+            if (connection.responseCode !in 200..299) {
+                val detail = connection.errorStream.bufferedReader().use { it.readText() }
+                close(IllegalStateException(JSONObject(detail).optString("detail", "Gateway stream failed")))
+            } else {
                 connection.inputStream.bufferedReader().forEachLine { line ->
                     if (line.startsWith("data:")) {
                         val data = line.removePrefix("data:").trim()
                         if (data.isNotBlank() && data != "[DONE]") trySend(data)
                     }
                 }
-                close()
-            } catch (e: Exception) {
-                close(e)
             }
+            close()
+        } catch (e: Exception) {
+            close(e)
         }
-        awaitClose {
-            reader.cancel()
-            connection.disconnect()
-        }
+        awaitClose { connection.disconnect() }
     }.flowOn(Dispatchers.IO)
 }

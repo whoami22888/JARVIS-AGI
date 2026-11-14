@@ -5,4 +5,6 @@
     <string name="restriction_enrollment_code_description">Deployment-provided enrollment secret. Do not place this value in source control.</string>
     <string name="restriction_device_name_title">Device name</string>
     <string name="restriction_device_name_description">Optional device label recorded by the gateway.</string>
+    <string name="restriction_porcupine_access_key_title">Porcupine access key</string>
+    <string name="restriction_porcupine_access_key_description">Picovoice Console access key used by the full flavor for the "Jarvis" hotword. Required only when on-device hotword detection is enabled.</string>
 </resources>

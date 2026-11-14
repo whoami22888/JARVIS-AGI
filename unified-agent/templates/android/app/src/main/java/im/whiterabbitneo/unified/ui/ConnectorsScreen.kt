@@ -91,7 +91,7 @@ fun ConnectorsScreen(vm: ConnectorViewModel) {
         )
     }
     revealFor?.let { state ->
-        var secret by remember { mutableStateOf<String?>(null) }
+        var secret by remember(state.definition.id) { mutableStateOf<String?>(null) }
         val activity = context as? FragmentActivity
         LaunchedEffect(state.definition.id) {
             if (activity != null && BiometricGate.canAuthenticate(context)) {

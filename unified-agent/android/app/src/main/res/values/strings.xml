@@ -1,4 +1,8 @@
 <resources>
     <string name="app_name">WhiteRabbit Neo</string>
-    <string name="accessibility_description">Enables only local, user-approved visible UI interactions proposed in the command center.</string>
+    <string name="accessibility_description">Enables only local, user-approved visible UI interactions proposed in the command center. Screen contents are read on device and never transmitted without approval.</string>
+    <string name="device_admin_description">Allows WhiteRabbit Neo to lock the screen and apply camera and password policies when the device owner approves.</string>
+    <string name="hotword_channel_name">Hotword detection</string>
+    <string name="hotword_running">Listening for the wake word</string>
+    <string name="hotword_stopped">Hotword detection stopped</string>
 </resources>

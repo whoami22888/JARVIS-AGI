@@ -112,7 +112,7 @@ dependencies {
     implementation("androidx.camera:camera-camera2:1.4.0")
     implementation("androidx.camera:camera-lifecycle:1.4.0")
     implementation("androidx.camera:camera-view:1.4.0")
-    implementation("com.google.mlkit:object-detection:17.0.1")
+    implementation("com.google.mlkit:object-detection:17.0.0")
 
     // Audio (offline speech recognition)
     implementation("com.alphacephei:vosk-android:0.3.32")
@@ -121,7 +121,7 @@ dependencies {
     implementation("androidx.documentfile:documentfile:1.0.1")
     implementation("androidx.work:work-runtime-ktx:2.9.0")
 
-    // Hotword detection (full flavor only; Porcupine is not available on Maven Central for minimal builds)
+    // Hotword detection (full flavor only; the engine is a stub in minimal builds)
     "fullImplementation"("com.picovoice:porcupine-android:3.0.2")
 
     testImplementation("junit:junit:4.13.2")
