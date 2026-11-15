@@ -9,6 +9,7 @@ import java.net.URL
 
 data class Pairing(val deviceId: String, val token: String)
 data class TaskResult(val status: String, val answer: String, val route: String?)
+data class Usage(val dailyTokens: Int, val inputTokens: Int, val outputTokens: Int)
 data class GatewayHealth(
     val status: String,
     val localOllamaEnabled: Boolean,
@@ -54,9 +55,22 @@ class GatewayClient {
         return Pairing(response.getString("device_id"), response.getString("token"))
     }
 
-    suspend fun task(url: String, token: String, prompt: String, enabled: Set<String>): TaskResult {
-        val response = request(url, "/v1/tasks", "POST", JSONObject().put("prompt", prompt).put("model", "deepseek-reasoner").put("enabled_capabilities", JSONArray(enabled.toList())), token)
+    suspend fun task(url: String, token: String, prompt: String, enabled: Set<String>, category: String = "general"): TaskResult {
+        val response = request(url, "/v1/tasks", "POST", JSONObject().put("prompt", prompt).put("model", "deepseek-reasoner").put("category", category).put("enabled_capabilities", JSONArray(enabled.toList())), token)
         return TaskResult(response.getString("status"), response.optString("answer", ""), response.optString("route").takeIf { it.isNotBlank() })
+    }
+
+    suspend fun usage(url: String, token: String): Usage {
+        val response = request(url, "/v1/usage", "GET", token = token)
+        return Usage(response.optInt("daily_tokens"), response.optInt("input_tokens"), response.optInt("output_tokens"))
+    }
+
+    suspend fun setBudget(url: String, token: String, dailyTokens: Int) {
+        request(url, "/v1/usage/budget", "POST", JSONObject().put("daily_tokens", dailyTokens), token)
+    }
+
+    suspend fun createSchedule(url: String, token: String, name: String, intervalSeconds: Int, payload: JSONObject) {
+        request(url, "/v1/schedules", "POST", JSONObject().put("name", name).put("interval_seconds", intervalSeconds).put("payload", payload), token)
     }
 
     suspend fun createRegistryItem(url: String, token: String, kind: String, name: String, definition: JSONObject) {

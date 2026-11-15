@@ -34,6 +34,23 @@ private val Muted = Color(0xFFB9CCBE)
 
 enum class Destination(val label: String) { Command("Command"), Tools("Tools"), Skills("Skills"), Mcp("MCP"), Memory("Memory") }
 
+data class OwnerIntegration(val key: String, val label: String, val detail: String)
+
+val OwnerIntegrations = listOf(
+    OwnerIntegration("shopping_deals", "Shopping and deals", "Price comparison and deal research"),
+    OwnerIntegration("app_recommendations", "App recommendations", "App discovery, reviews, and compatibility"),
+    OwnerIntegration("food_orders", "Food ordering optimization", "Menus, nutrition, and delivery comparisons"),
+    OwnerIntegration("gaming_strategies", "Gaming tactics", "Strategies, walkthroughs, and mod research"),
+    OwnerIntegration("image_history", "Image generation and enhancement", "Image generation, editing, and upscaling providers"),
+    OwnerIntegration("forensic_findings", "Forensic analysis", "File metadata, logs, and defensive analysis"),
+    OwnerIntegration("reverse_engineering", "APK reverse engineering", "Authorized APK inventory and analysis tools"),
+    OwnerIntegration("automation_workflows", "Phone automation", "Android/iOS workflows and device actions"),
+    OwnerIntegration("file_optimization", "File organization", "Local indexing, duplicates, and cleanup plans"),
+    OwnerIntegration("mcp", "MCP integrations", "Owner-selected MCP endpoints and tools"),
+    OwnerIntegration("automation", "Recurring automations", "Schedules, notifications, and background jobs"),
+    OwnerIntegration("external_providers", "External AI providers", "Cloud fallback and media providers"),
+)
+
 class AgentViewModel : ViewModel() {
     var gatewayUrl by mutableStateOf("")
     var selectedGatewayUrl by mutableStateOf("")
@@ -46,8 +63,12 @@ class AgentViewModel : ViewModel() {
     var enabled by mutableStateOf(setOf<String>())
     var discoveredGateways by mutableStateOf(emptyList<GatewayCandidate>())
     var scanningGateways by mutableStateOf(false)
+    var installSetupVisible by mutableStateOf(false)
+    var ownerSelected by mutableStateOf(setOf<String>())
+    var ownerApproved by mutableStateOf(false)
 
     private lateinit var vault: TokenVault
+    private lateinit var ownerPreferences: android.content.SharedPreferences
     private lateinit var memoryStore: MemoryStore
     private lateinit var managedConfig: ManagedGatewayConfig
     private var discovery: GatewayDiscovery? = null
@@ -59,6 +80,10 @@ class AgentViewModel : ViewModel() {
     fun initialize(activity: ComponentActivity) {
         vault = TokenVault(activity)
         memoryStore = MemoryStore(activity)
+        ownerPreferences = activity.getSharedPreferences("owner_integrations", 0)
+        ownerSelected = ownerPreferences.getStringSet("selected", emptySet())?.toSet() ?: emptySet()
+        ownerApproved = ownerPreferences.getBoolean("approved", false)
+        installSetupVisible = !ownerApproved
         managedConfig = ManagedGatewayConfig.load(activity)
         gatewayUrl = managedConfig.gatewayUrl
         selectedGatewayUrl = managedConfig.gatewayUrl
@@ -99,6 +124,25 @@ class AgentViewModel : ViewModel() {
             }
         }
     }
+
+    fun saveOwnerSetup(selected: Set<String>) {
+        ownerSelected = selected
+        ownerApproved = true
+        ownerPreferences.edit().putStringSet("selected", selected).putBoolean("approved", true).apply()
+        installSetupVisible = false
+        status = "Owner integration selections saved"
+    }
+
+    fun reopenOwnerSetup() { installSetupVisible = true }
+
+    private fun approvedCapabilities(): Set<String> = enabled.filter { capability ->
+        when {
+            capability == "automation" -> ownerSelected.contains("automation")
+            capability == "api_call" -> ownerSelected.contains("external_providers")
+            capability == "web_read" -> true
+            else -> ownerSelected.contains(capability)
+        }
+    }.toSet()
 
     private fun readiness(localEnabled: Boolean, localModel: String, cloudEnabled: Boolean, cloudModel: String): String = when {
         localEnabled -> "Local Ollama configured: $localModel"
@@ -142,7 +186,7 @@ class AgentViewModel : ViewModel() {
         status = "Gateway disconnected. Select and connect a trusted gateway to continue."
     }
 
-    suspend fun run(prompt: String) { try { val token = vault.load() ?: error("Connect to the trusted gateway first"); routeState = HudRouteStates.running; status = routeState.detail; val result = client.task(gatewayUrl, token, prompt, enabled); routeState = HudRouteStates.fromTask(result.status, result.route); status = routeState.detail; answer = result.answer } catch (e: Exception) { routeState = HudRouteStates.failure(e.message ?: "Task failed"); status = routeState.detail } }
+    suspend fun run(prompt: String, category: String) { try { check(ownerApproved) { "Complete owner integration approval first" }; val token = vault.load() ?: error("Connect to the trusted gateway first"); routeState = HudRouteStates.running; status = routeState.detail; val result = client.task(gatewayUrl, token, prompt, approvedCapabilities(), category.ifBlank { "general" }); routeState = HudRouteStates.fromTask(result.status, result.route); status = routeState.detail; answer = result.answer } catch (e: Exception) { routeState = HudRouteStates.failure(e.message ?: "Task failed"); status = routeState.detail } }
     suspend fun addRegistry(kind: String, name: String, definition: JSONObject) { try { val token = vault.load() ?: error("Connect to the trusted gateway first"); client.createRegistryItem(gatewayUrl, token, kind, name, definition); status = "$kind added to registry" } catch (e: Exception) { status = e.message ?: "Registry update failed" } }
     fun memory(): List<String> = if (::memoryStore.isInitialized) memoryStore.list() else emptyList()
     fun addMemory(note: String) { memoryStore.add(note) }
@@ -175,17 +219,42 @@ fun WhiteRabbitApp(activity: ComponentActivity, vm: AgentViewModel = viewModel()
                 Destination.Mcp -> RegistryScreen(vm, "mcp", "MCP Registry", "Store trusted MCP endpoint metadata. Credentials remain on the authorized gateway.")
                 Destination.Memory -> MemoryScreen(vm)
             }
-        } }
+        }
+        if (vm.installSetupVisible) OwnerSetupDialog(vm)
     }
+}
+}
+
+@Composable private fun OwnerSetupDialog(vm: AgentViewModel) {
+    var selected by remember(vm.ownerSelected) { mutableStateOf(vm.ownerSelected) }
+    AlertDialog(
+        onDismissRequest = { if (vm.ownerApproved) vm.installSetupVisible = false },
+        title = { Text("Owner integration setup") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Select the optional integrations you approve for this installation. Nothing is connected or executed automatically.", color = Muted, style = MaterialTheme.typography.bodySmall)
+                OwnerIntegrations.forEach { integration ->
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                        Checkbox(checked = selected.contains(integration.key), onCheckedChange = { checked -> selected = selected.toMutableSet().apply { if (checked) add(integration.key) else remove(integration.key) } })
+                        Column(Modifier.padding(top = 12.dp)) { Text(integration.label, color = Color.White); Text(integration.detail, color = Muted, style = MaterialTheme.typography.bodySmall) }
+                    }
+                }
+            }
+        },
+        confirmButton = { Button(onClick = { vm.saveOwnerSetup(selected) }) { Text("Save and approve") } },
+        dismissButton = { if (vm.ownerApproved) TextButton(onClick = { vm.installSetupVisible = false }) { Text("Cancel") } },
+    )
 }
 
 @Composable private fun StatusCard(status: String, paired: Boolean, routeState: HudRouteState) = Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(14.dp)) { Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Column { Text(if (paired) "SECURE GATEWAY LINK" else "SETUP REQUIRED", color = Mint, style = MaterialTheme.typography.labelMedium); Text(status, color = Muted, style = MaterialTheme.typography.bodySmall) }; AssistChip(onClick = {}, label = { Text(if (paired) routeState.mode.chip else "OFFLINE") }) } }
 
-@Composable private fun CommandScreen(vm: AgentViewModel) { val scope = rememberCoroutineScope(); var prompt by remember { mutableStateOf("") }; var web by remember { mutableStateOf(false) }; var api by remember { mutableStateOf(false) }; var automation by remember { mutableStateOf(false) }; Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+@Composable private fun CommandScreen(vm: AgentViewModel) { val scope = rememberCoroutineScope(); var prompt by remember { mutableStateOf("") }; var category by remember { mutableStateOf("general") }; var web by remember { mutableStateOf(false) }; var api by remember { mutableStateOf(false) }; var automation by remember { mutableStateOf(false) }; Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
     Card(colors = CardDefaults.cardColors(containerColor = Panel)) { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("TRUSTED GATEWAY SETUP", color = Mint, fontWeight = FontWeight.Bold)
         Text(if (vm.enrollmentAvailable) vm.gatewayUrl else "Managed gateway configuration unavailable", color = Muted, style = MaterialTheme.typography.bodySmall)
         Text(vm.providerState, color = Muted, style = MaterialTheme.typography.bodySmall)
+        Text(if (vm.ownerApproved) "Owner approvals: ${vm.ownerSelected.size} integrations selected" else "Owner integration approval required", color = if (vm.ownerApproved) Mint else Color(0xFFFFC27A), style = MaterialTheme.typography.bodySmall)
+        OutlinedButton(onClick = { vm.reopenOwnerSetup() }, modifier = Modifier.fillMaxWidth()) { Text("Review owner integrations") }
         Button(onClick = { vm.scanForGateways() }, enabled = !vm.scanningGateways, modifier = Modifier.fillMaxWidth()) { Text(if (vm.scanningGateways) "Scanning local network…" else "Find local gateways") }
         if (vm.discoveredGateways.isNotEmpty()) {
             Text("Advertised local gateways", color = Mint, fontWeight = FontWeight.Bold)
@@ -207,8 +276,9 @@ fun WhiteRabbitApp(activity: ComponentActivity, vm: AgentViewModel = viewModel()
     CapabilityToggle("Web read — public HTTPS only", web) { web = it; vm.enabled = vm.enabled.toMutableSet().apply { if (it) add("web_read") else remove("web_read") } }
     CapabilityToggle("API calls — gateway-authorized only", api) { api = it; vm.enabled = vm.enabled.toMutableSet().apply { if (it) add("api_call") else remove("api_call") } }
     CapabilityToggle("Automation — always proposed, never silent", automation) { automation = it; vm.enabled = vm.enabled.toMutableSet().apply { if (it) add("automation") else remove("automation") } }
+    OutlinedTextField(value = category, onValueChange = { category = it }, label = { Text("Domain (optional, e.g. shopping_deals)") }, modifier = Modifier.fillMaxWidth())
     OutlinedTextField(value = prompt, onValueChange = { prompt = it }, label = { Text("Ask the unified agent") }, modifier = Modifier.fillMaxWidth().height(140.dp))
-    Button(onClick = { scope.launch { vm.run(prompt) } }, enabled = vm.paired && prompt.isNotBlank(), modifier = Modifier.fillMaxWidth()) { Text("Run unified agent") }
+    Button(onClick = { scope.launch { vm.run(prompt, category) } }, enabled = vm.paired && prompt.isNotBlank(), modifier = Modifier.fillMaxWidth()) { Text("Run unified agent") }
     if (vm.answer.isNotBlank()) Card(colors = CardDefaults.cardColors(containerColor = Panel)) { Text(vm.answer, Modifier.padding(14.dp), color = Color.White) }
 } }
 
