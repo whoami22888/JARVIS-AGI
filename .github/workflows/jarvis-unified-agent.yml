@@ -82,3 +82,53 @@ jobs:
           path: unified-agent/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 7
+
+  container-arm64:
+    needs: backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Build and smoke-test ARM64 Docker image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker buildx build --platform linux/arm64 --load --tag jarvis-gateway:arm64 unified-agent/backend
+          docker volume create jarvis-smoke-data
+          docker run --platform linux/arm64 -d --name jarvis-gateway-smoke \
+            --read-only --cap-drop=ALL --security-opt=no-new-privileges \
+            --tmpfs /tmp -v jarvis-smoke-data:/srv/data \
+            -p 127.0.0.1:18080:8080 \
+            -e PAIRING_CODE=smoke-test-long-pairing-code -e TOKEN_SECRET=smoke-test-long-token-secret-value \
+            -e LOCAL_OLLAMA_ENABLED=false -e CLOUD_FALLBACK_ENABLED=false \
+            jarvis-gateway:arm64
+          trap 'docker logs jarvis-gateway-smoke || true; docker rm -f jarvis-gateway-smoke || true; docker volume rm jarvis-smoke-data || true' EXIT
+          python - <<'PY'
+          import json, time, urllib.request
+          base = 'http://127.0.0.1:18080'
+          for attempt in range(30):
+              try:
+                  with urllib.request.urlopen(base + '/health', timeout=2) as response:
+                      assert json.load(response)['status'] == 'ok'
+                  break
+              except Exception:
+                  if attempt == 29: raise
+                  time.sleep(1)
+          def post(path, body, headers=None):
+              request = urllib.request.Request(base + path, json.dumps(body).encode(), {'Content-Type': 'application/json', **(headers or {})})
+              with urllib.request.urlopen(request, timeout=10) as response:
+                  return json.load(response)
+          pair = post('/v1/pair', {'pairing_code': 'smoke-test-long-pairing-code', 'device_name': 'CI'})
+          task = post('/v1/tasks', {'prompt': 'Test SQLite persistence'}, {'Authorization': 'Bearer ' + pair['token']})
+          assert task['status'] == 'blocked', task
+          print('ARM64 container health, pairing, SQLite and task lifecycle passed')
+          PY
+          docker save jarvis-gateway:arm64 -o jarvis-gateway-arm64.tar
+      - name: Upload ARM64 gateway image
+        uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-gateway-arm64-docker-image
+          path: jarvis-gateway-arm64.tar
+          if-no-files-found: error
+          retention-days: 7
