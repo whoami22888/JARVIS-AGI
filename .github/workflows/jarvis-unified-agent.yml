@@ -60,7 +60,16 @@ jobs:
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
       - name: Install Android SDK packages
-        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          sdkmanager_path="$(find "$sdk_root/cmdline-tools" -type f -name sdkmanager -print -quit)"
+          if [[ ! -x "$sdkmanager_path" ]]; then
+            echo "Android SDK command-line tools not found in $sdk_root" >&2
+            exit 1
+          fi
+          "$sdkmanager_path" 'platforms;android-35' 'build-tools;35.0.0'
       - name: Build and test debug APK
         working-directory: unified-agent/android
         run: |
