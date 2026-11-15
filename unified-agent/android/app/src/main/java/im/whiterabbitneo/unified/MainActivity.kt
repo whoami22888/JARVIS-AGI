@@ -13,12 +13,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import im.whiterabbitneo.unified.data.GatewayCandidate
 import im.whiterabbitneo.unified.data.GatewayClient
 import im.whiterabbitneo.unified.data.GatewayDiscovery
+import im.whiterabbitneo.unified.data.GatewayUrlPolicy
 import im.whiterabbitneo.unified.data.HudRouteState
 import im.whiterabbitneo.unified.data.HudRouteStates
 import im.whiterabbitneo.unified.data.ManagedGatewayConfig
@@ -66,6 +68,7 @@ class AgentViewModel : ViewModel() {
     var installSetupVisible by mutableStateOf(false)
     var ownerSelected by mutableStateOf(setOf<String>())
     var ownerApproved by mutableStateOf(false)
+    var managedEnrollment by mutableStateOf(false)
 
     private lateinit var vault: TokenVault
     private lateinit var ownerPreferences: android.content.SharedPreferences
@@ -84,15 +87,23 @@ class AgentViewModel : ViewModel() {
         ownerSelected = ownerPreferences.getStringSet("selected", emptySet())?.toSet() ?: emptySet()
         ownerApproved = ownerPreferences.getBoolean("approved", false)
         installSetupVisible = !ownerApproved
-        managedConfig = ManagedGatewayConfig.load(activity)
+        val managed = ManagedGatewayConfig.load(activity)
+        managedEnrollment = managed.isComplete
+        val savedUrl = ownerPreferences.getString("personal_gateway_url", "") ?: ""
+        managedConfig = if (managedEnrollment) managed else ManagedGatewayConfig(
+            gatewayUrl = savedUrl, enrollmentCode = "", deviceName = "Jarvis Personal Android",
+        )
         gatewayUrl = managedConfig.gatewayUrl
         selectedGatewayUrl = managedConfig.gatewayUrl
         enrollmentAvailable = managedConfig.isComplete
-        paired = vault.load() != null
+        val pairedUrl = ownerPreferences.getString("paired_gateway_url", "")
+        paired = vault.load() != null &&
+            (pairedUrl == gatewayUrl || (managedEnrollment && pairedUrl.isNullOrBlank()))
+        if (!paired) vault.clear()
         status = when {
             paired -> "Trusted gateway token stored on device"
-            enrollmentAvailable -> "Select the advertised trusted gateway or connect to the managed gateway"
-            else -> "Managed gateway configuration is required before enrollment"
+            managedEnrollment -> "Connect to the owner-managed HTTPS gateway"
+            else -> "Enter personal gateway URL and one-time pairing code"
         }
         discovery = GatewayDiscovery(
             activity,
@@ -125,6 +136,28 @@ class AgentViewModel : ViewModel() {
         }
     }
 
+    fun configurePersonalGateway(url: String, pairingCode: String): Boolean {
+        if (managedEnrollment) {
+            status = "Managed gateway settings cannot be overridden"
+            return false
+        }
+        val normalized = GatewayUrlPolicy.normalize(url)
+        if (normalized == null || pairingCode.length < 16) {
+            status = "Use HTTPS or http://127.0.0.1:<port> and a code of at least 16 characters"
+            return false
+        }
+        if (::vault.isInitialized) vault.clear()
+        paired = false
+        managedConfig = ManagedGatewayConfig(normalized, pairingCode, "Jarvis Personal Android")
+        gatewayUrl = normalized
+        selectedGatewayUrl = normalized
+        enrollmentAvailable = true
+        ownerPreferences.edit().putString("personal_gateway_url", normalized)
+            .remove("paired_gateway_url").apply()
+        status = "Gateway saved; tap Trust & connect to enroll"
+        return true
+    }
+
     fun saveOwnerSetup(selected: Set<String>) {
         ownerSelected = selected
         ownerApproved = true
@@ -152,13 +185,15 @@ class AgentViewModel : ViewModel() {
 
     suspend fun trustAndConnect() {
         try {
-            check(enrollmentAvailable) { "Managed gateway configuration is not available" }
-            check(trustedSelection) { "Select the advertised gateway approved for this device before connecting" }
+            check(enrollmentAvailable) { "Gateway configuration and pairing code are required" }
+            check(trustedSelection) { "Select the configured trusted gateway before connecting" }
             status = "Checking trusted gateway…"
             val health = client.health(gatewayUrl)
             providerState = readiness(health.localOllamaEnabled, health.localOllamaModel, health.authorizedCloudFallbackEnabled, health.cloudModel)
             val result = client.pair(gatewayUrl, managedConfig.deviceName, managedConfig.enrollmentCode)
             vault.save(result.token)
+            ownerPreferences.edit().putString("paired_gateway_url", gatewayUrl).apply()
+            if (!managedEnrollment) managedConfig = managedConfig.copy(enrollmentCode = "")
             paired = true
             routeState = HudRouteStates.idle
             status = "Trusted gateway connected as ${result.deviceId.take(8)}…"
@@ -180,10 +215,11 @@ class AgentViewModel : ViewModel() {
 
     fun disconnect() {
         if (::vault.isInitialized) vault.clear()
+        if (::ownerPreferences.isInitialized) ownerPreferences.edit().remove("paired_gateway_url").apply()
         paired = false
         answer = ""
         routeState = HudRouteStates.idle
-        status = "Gateway disconnected. Select and connect a trusted gateway to continue."
+        status = "Gateway disconnected. Re-enter a pairing code to reconnect."
     }
 
     suspend fun run(prompt: String, category: String) { try { check(ownerApproved) { "Complete owner integration approval first" }; val token = vault.load() ?: error("Connect to the trusted gateway first"); routeState = HudRouteStates.running; status = routeState.detail; val result = client.task(gatewayUrl, token, prompt, approvedCapabilities(), category.ifBlank { "general" }); routeState = HudRouteStates.fromTask(result.status, result.route); status = routeState.detail; answer = result.answer } catch (e: Exception) { routeState = HudRouteStates.failure(e.message ?: "Task failed"); status = routeState.detail } }
@@ -248,10 +284,21 @@ fun WhiteRabbitApp(activity: ComponentActivity, vm: AgentViewModel = viewModel()
 
 @Composable private fun StatusCard(status: String, paired: Boolean, routeState: HudRouteState) = Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(14.dp)) { Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Column { Text(if (paired) "SECURE GATEWAY LINK" else "SETUP REQUIRED", color = Mint, style = MaterialTheme.typography.labelMedium); Text(status, color = Muted, style = MaterialTheme.typography.bodySmall) }; AssistChip(onClick = {}, label = { Text(if (paired) routeState.mode.chip else "OFFLINE") }) } }
 
-@Composable private fun CommandScreen(vm: AgentViewModel) { val scope = rememberCoroutineScope(); var prompt by remember { mutableStateOf("") }; var category by remember { mutableStateOf("general") }; var web by remember { mutableStateOf(false) }; var api by remember { mutableStateOf(false) }; var automation by remember { mutableStateOf(false) }; Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+@Composable private fun CommandScreen(vm: AgentViewModel) { val scope = rememberCoroutineScope(); var personalGatewayUrl by remember { mutableStateOf("http://127.0.0.1:8080") }; var pairingCode by remember { mutableStateOf("") }; var prompt by remember { mutableStateOf("") }; var category by remember { mutableStateOf("general") }; var web by remember { mutableStateOf(false) }; var api by remember { mutableStateOf(false) }; var automation by remember { mutableStateOf(false) }; Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
     Card(colors = CardDefaults.cardColors(containerColor = Panel)) { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("TRUSTED GATEWAY SETUP", color = Mint, fontWeight = FontWeight.Bold)
-        Text(if (vm.enrollmentAvailable) vm.gatewayUrl else "Managed gateway configuration unavailable", color = Muted, style = MaterialTheme.typography.bodySmall)
+        Text(if (vm.gatewayUrl.isNotBlank()) vm.gatewayUrl else "Personal gateway not configured", color = Muted, style = MaterialTheme.typography.bodySmall)
+        if (!vm.managedEnrollment && !vm.paired) {
+            OutlinedTextField(value = personalGatewayUrl, onValueChange = { personalGatewayUrl = it },
+                label = { Text("Gateway URL (localhost or HTTPS)") }, singleLine = true,
+                modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(value = pairingCode, onValueChange = { pairingCode = it },
+                label = { Text("One-time pairing code") }, singleLine = true,
+                visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+            Button(onClick = {
+                if (vm.configurePersonalGateway(personalGatewayUrl, pairingCode)) pairingCode = ""
+            }, modifier = Modifier.fillMaxWidth()) { Text("Save personal gateway") }
+        }
         Text(vm.providerState, color = Muted, style = MaterialTheme.typography.bodySmall)
         Text(if (vm.ownerApproved) "Owner approvals: ${vm.ownerSelected.size} integrations selected" else "Owner integration approval required", color = if (vm.ownerApproved) Mint else Color(0xFFFFC27A), style = MaterialTheme.typography.bodySmall)
         OutlinedButton(onClick = { vm.reopenOwnerSetup() }, modifier = Modifier.fillMaxWidth()) { Text("Review owner integrations") }
@@ -264,7 +311,7 @@ fun WhiteRabbitApp(activity: ComponentActivity, vm: AgentViewModel = viewModel()
                 }
             }
         }
-        Text("Discovery does not grant access. The selected gateway must match the device-owner HTTPS configuration before the hidden managed enrollment code can authorize this device.", color = Muted, style = MaterialTheme.typography.bodySmall)
+        Text("Discovery does not grant access. Discovered gateway must match your explicitly configured gateway. Pairing is still required.", color = Muted, style = MaterialTheme.typography.bodySmall)
         if (!vm.paired) {
             Button(onClick = { scope.launch { vm.trustAndConnect() } }, enabled = vm.enrollmentAvailable, modifier = Modifier.fillMaxWidth()) { Text("Trust & connect") }
         } else {
