@@ -2,6 +2,7 @@ name: Jarvis Unified Agent CI
 
 on:
   push:
+    branches: [main]
     paths:
       - 'unified-agent/**'
       - '.github/workflows/jarvis-unified-agent.yml'
