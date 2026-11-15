@@ -18,6 +18,12 @@ class ManagedGatewayConfigTest {
     }
 
     @Test
+    fun loopbackGatewayWithLongEnrollmentCodeIsReady() {
+        val config = ManagedGatewayConfig("http://127.0.0.1:8080", "0123456789abcdef", "test")
+        assertTrue(config.isComplete)
+    }
+
+    @Test
     fun shortEnrollmentCodeIsRejected() {
         val config = ManagedGatewayConfig("https://agent.example.net", "too-short", "test phone")
         assertFalse(config.isComplete)

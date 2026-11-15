@@ -20,8 +20,9 @@ data class GatewayHealth(
 
 class GatewayClient {
     private suspend fun request(baseUrl: String, path: String, method: String, body: JSONObject? = null, token: String? = null): JSONObject = withContext(Dispatchers.IO) {
-        require(baseUrl.startsWith("https://")) { "Gateway URL must use HTTPS." }
-        val connection = (URL(baseUrl.trimEnd('/') + path).openConnection() as HttpURLConnection).apply {
+        val normalizedUrl = GatewayUrlPolicy.normalize(baseUrl)
+            ?: error("Gateway must use HTTPS or phone-local http://127.0.0.1:<port>.")
+        val connection = (URL(normalizedUrl + path).openConnection() as HttpURLConnection).apply {
             requestMethod = method
             connectTimeout = 15000
             readTimeout = 60000

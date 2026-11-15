@@ -7,9 +7,10 @@ data class ManagedGatewayConfig(
     val gatewayUrl: String,
     val enrollmentCode: String,
     val deviceName: String,
+    val isManaged: Boolean = false,
 ) {
     val isComplete: Boolean
-        get() = gatewayUrl.startsWith("https://") && enrollmentCode.length >= 16
+        get() = GatewayUrlPolicy.normalize(gatewayUrl) != null && enrollmentCode.length >= 16
 
     companion object {
         private const val GATEWAY_URL = "gateway_url"
@@ -23,6 +24,7 @@ data class ManagedGatewayConfig(
                 gatewayUrl = restrictions.getString(GATEWAY_URL, "").trimEnd('/'),
                 enrollmentCode = restrictions.getString(ENROLLMENT_CODE, ""),
                 deviceName = restrictions.getString(DEVICE_NAME, "WhiteRabbit Neo Android"),
+                isManaged = true,
             )
         }
     }
