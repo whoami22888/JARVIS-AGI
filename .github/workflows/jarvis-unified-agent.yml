@@ -1,0 +1,76 @@
+name: Jarvis Unified Agent CI
+
+on:
+  push:
+    paths:
+      - 'unified-agent/**'
+      - '.github/workflows/jarvis-unified-agent.yml'
+  pull_request:
+    paths:
+      - 'unified-agent/**'
+      - '.github/workflows/jarvis-unified-agent.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: unified-agent/backend/requirements.txt
+      - name: Install backend dependencies
+        run: python -m pip install -r unified-agent/backend/requirements.txt
+      - name: Lint shell and compile Python source
+        run: |
+          bash -n unified-agent/bootstrap_android.sh unified-agent/bootstrap_backend.sh
+          python -m compileall -q unified-agent/backend/app
+      - name: Verify generated source matches maintained templates
+        shell: bash
+        run: |
+          set -euo pipefail
+          for area in android backend; do
+            while IFS= read -r -d '' file; do
+              target="unified-agent/$area/${file#unified-agent/templates/$area/}"
+              test -f "$target" && cmp "$file" "$target" || { echo "Template drift: $file" >&2; exit 1; }
+            done < <(find "unified-agent/templates/$area" -type f -print0)
+          done
+      - name: Test safe bootstrap behavior
+        run: python -m unittest discover -s unified-agent/tests -p '*test.py' -v
+      - name: Run backend regression suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          for test in unified-agent/backend/tests/*_test.py; do
+            PYTHONPATH=unified-agent/backend python "$test"
+          done
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK packages
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Build and test debug APK
+        working-directory: unified-agent/android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon :app:testDebugUnitTest :app:assembleDebug
+      - name: Publish installable debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-unified-debug-apk
+          path: unified-agent/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
