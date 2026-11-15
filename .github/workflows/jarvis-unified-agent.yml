@@ -1,0 +1,134 @@
+name: Jarvis Unified Agent CI
+
+on:
+  push:
+    paths:
+      - 'unified-agent/**'
+      - '.github/workflows/jarvis-unified-agent.yml'
+  pull_request:
+    paths:
+      - 'unified-agent/**'
+      - '.github/workflows/jarvis-unified-agent.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: unified-agent/backend/requirements.txt
+      - name: Install backend dependencies
+        run: python -m pip install -r unified-agent/backend/requirements.txt
+      - name: Lint shell and compile Python source
+        run: |
+          bash -n unified-agent/bootstrap_android.sh unified-agent/bootstrap_backend.sh
+          python -m compileall -q unified-agent/backend/app
+      - name: Verify generated source matches maintained templates
+        shell: bash
+        run: |
+          set -euo pipefail
+          for area in android backend; do
+            while IFS= read -r -d '' file; do
+              target="unified-agent/$area/${file#unified-agent/templates/$area/}"
+              test -f "$target" && cmp "$file" "$target" || { echo "Template drift: $file" >&2; exit 1; }
+            done < <(find "unified-agent/templates/$area" -type f -print0)
+          done
+      - name: Test safe bootstrap behavior
+        run: python -m unittest discover -s unified-agent/tests -p '*test.py' -v
+      - name: Run backend regression suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          for test in unified-agent/backend/tests/*_test.py; do
+            PYTHONPATH=unified-agent/backend python "$test"
+          done
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Install Android SDK packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          sdkmanager_path="$(find "$sdk_root/cmdline-tools" -type f -name sdkmanager -print -quit)"
+          if [[ ! -x "$sdkmanager_path" ]]; then
+            echo "Android SDK command-line tools not found in $sdk_root" >&2
+            exit 1
+          fi
+          "$sdkmanager_path" 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Build and test debug APK
+        working-directory: unified-agent/android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon :app:testDebugUnitTest :app:assembleDebug
+      - name: Publish installable debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-unified-debug-apk
+          path: unified-agent/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
+
+  container-arm64:
+    needs: backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Build and smoke-test ARM64 Docker image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker buildx build --platform linux/arm64 --load --tag jarvis-gateway:arm64 unified-agent/backend
+          docker volume create jarvis-smoke-data
+          docker run --platform linux/arm64 -d --name jarvis-gateway-smoke \
+            --read-only --cap-drop=ALL --security-opt=no-new-privileges \
+            --tmpfs /tmp -v jarvis-smoke-data:/srv/data \
+            -p 127.0.0.1:18080:8080 \
+            -e PAIRING_CODE=smoke-test-long-pairing-code -e TOKEN_SECRET=smoke-test-long-token-secret-value \
+            -e LOCAL_OLLAMA_ENABLED=false -e CLOUD_FALLBACK_ENABLED=false \
+            jarvis-gateway:arm64
+          trap 'docker logs jarvis-gateway-smoke || true; docker rm -f jarvis-gateway-smoke || true; docker volume rm jarvis-smoke-data || true' EXIT
+          python - <<'PY'
+          import json, time, urllib.request
+          base = 'http://127.0.0.1:18080'
+          for attempt in range(30):
+              try:
+                  with urllib.request.urlopen(base + '/health', timeout=2) as response:
+                      assert json.load(response)['status'] == 'ok'
+                  break
+              except Exception:
+                  if attempt == 29: raise
+                  time.sleep(1)
+          def post(path, body, headers=None):
+              request = urllib.request.Request(base + path, json.dumps(body).encode(), {'Content-Type': 'application/json', **(headers or {})})
+              with urllib.request.urlopen(request, timeout=10) as response:
+                  return json.load(response)
+          pair = post('/v1/pair', {'pairing_code': 'smoke-test-long-pairing-code', 'device_name': 'CI'})
+          task = post('/v1/tasks', {'prompt': 'Test SQLite persistence'}, {'Authorization': 'Bearer ' + pair['token']})
+          assert task['status'] == 'blocked', task
+          print('ARM64 container health, pairing, SQLite and task lifecycle passed')
+          PY
+          docker save jarvis-gateway:arm64 -o jarvis-gateway-arm64.tar
+      - name: Upload ARM64 gateway image
+        uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-gateway-arm64-docker-image
+          path: jarvis-gateway-arm64.tar
+          if-no-files-found: error
+          retention-days: 7

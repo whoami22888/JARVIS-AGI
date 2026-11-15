@@ -1,6 +1,6 @@
 FROM python:3.12-slim
-ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
-RUN useradd --create-home --uid 10001 agent
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 DATA_DIR=/srv/data
+RUN useradd --create-home --uid 10001 agent && mkdir -p /srv/data && chown 10001 /srv/data && chmod 700 /srv/data
 WORKDIR /srv/app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
